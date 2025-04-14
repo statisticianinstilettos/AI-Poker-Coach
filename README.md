@@ -1,4 +1,4 @@
-# Floppy
+# AI Poker Coach
 Floppy the postflop poker coach powered by RL and LLMs 
 
 🚀 To run it locally:
