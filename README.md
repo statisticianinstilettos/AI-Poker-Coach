@@ -9,8 +9,12 @@ AI poker coach powered by RL and LLMs
 3. Create a virtual environment: python -m venv venv
 4. Activate the virtual environment: source venv/bin/activate
 5. Install the Requirements in yourr virtual environment: pip install -r requirements.txt
-6. Run the app locally: streamlit run poker_chatbot.py
-7. Open your browser to http://localhost:8501
+6. Configure your OpenAI API key
+   - Create a .streamlit directory: mkdir path/to/your/project/.streamlit
+   - Inside that folder, create your secrets.toml: nano path/to/your/project/.streamlit/secrets.toml
+   - Add your OpenAI API key to the file. Paste in: OPENAI_API_KEY = "sk-your-real-openai-key-here"
+8. Run the app locally: streamlit run poker_chatbot.py
+9. Open your browser to http://localhost:8501
 
 
 
