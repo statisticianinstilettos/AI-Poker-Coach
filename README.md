@@ -9,7 +9,8 @@ AI poker coach powered by RL and LLMs
 3. Create a virtual environment: python -m venv venv
 4. Activate the virtual environment: source venv/bin/activate
 5. Install the Requirements in yourr virtual environment: pip install -r requirements.txt
-6. Run the app locally: streamlit run poker_chatbot.py 
+6. Run the app locally: streamlit run poker_chatbot.py
+7. Open your browser to http://localhost:8501
 
 
 
