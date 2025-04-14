@@ -1,12 +1,17 @@
 # AI Poker Coach
-Floppy the postflop poker coach powered by RL and LLMs 
+AI poker coach powered by RL and LLMs 
 
-🚀 To run it locally:
-	1.	Save the file above as poker_chatbot.py
-	2.	Install dependencies:
- 3.	Run the app: streamlit run poker_chatbot.py
 
- 
+
+🚀 To run it locally: (for MAC obviously)
+1. Clone this repo.
+2. Open your terminal and navigate to the project directory: cd path/to/your/project
+3. Create a virtual environment: python -m venv venv
+4. Activate the virtual environment: source venv/bin/activate
+5. Install the Requirements in yourr virtual environment: pip install -r requirements.txt
+6. Run the app locally: streamlit run poker_chatbot.py 
+
+
 
 🌐 To deploy it online:
 
