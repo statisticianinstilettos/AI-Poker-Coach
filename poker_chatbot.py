@@ -1,8 +1,21 @@
 import streamlit as st
-import openai
+import opik
+import os
 
-# Use API key from secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Use API keys from secrets
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+os.environ["OPIK_API_KEY"] = st.secrets["OPIK_API_KEY"]
+os.environ["OPIK_WORKSPACE"] = "statisticianinstilettos" 
+os.environ["OPIK_PROJECT_NAME"] = "My-Poker-Coach" 
+
+opik.configure(use_local=False)
+
+from opik import track, opik_context
+from opik.integrations.openai import track_openai
+
+from openai import OpenAI
+client = OpenAI() #Set up OpenAI
+openai_client = track_openai(client) #set up the Opik tracer
 
 # Page configuration
 st.set_page_config(page_title="♠️ Poker Coach GPT", page_icon="♠️", layout="centered")
@@ -98,7 +111,7 @@ if user_input:
     st.session_state.chat.append({"role": "user", "content": user_input})
 
     # Call OpenAI
-    response = openai.chat.completions.create(
+    response = client.chat.completions.create(
         model="o3-mini",  # Lil reasoning model
         reasoning_effort="medium",
         messages=st.session_state.chat
