@@ -65,7 +65,7 @@ st.markdown("""
 
 # Header
 st.title("♠️ AI Poker Coach")
-st.markdown("Get strategy advice, hand reviews, and tournament tips.")
+st.markdown("Get strategy advice, hand reviews, and tournament tips from your expert AI coach.")
 
 # Initialize chat history
 if "chat" not in st.session_state:
