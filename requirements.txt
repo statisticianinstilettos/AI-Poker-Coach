@@ -2,3 +2,6 @@ streamlit
 openai
 altair==4.2.2
 opik
+streamlit-mic-recorder
+scipy
+numpy
