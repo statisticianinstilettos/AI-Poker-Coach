@@ -1,10 +1,11 @@
 cookie:
   expiry_days: 30
-  key: your_cookie_key_here  # Replace with a secure random string
+  key: random_signature_key_123  # Replace with your own random key
   name: poker_coach_cookie
 credentials:
   usernames:
-    example_user:
-      email: user@example.com
-      name: Example User
-      password: your_hashed_password_here  # Will be automatically hashed when you create a real user
+    test_user:  # Replace with your desired username
+      email: test@example.com  # Replace with your email
+      first_name: Test  # Replace with your first name
+      last_name: User  # Replace with your last name
+      password: your_hashed_password  # Use stauth.Hasher.hash('your_password') to generate hash

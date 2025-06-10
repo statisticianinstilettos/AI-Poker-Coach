@@ -209,3 +209,5 @@ config.yaml
 
 # Logs
 *.log
+
+test_hash.py

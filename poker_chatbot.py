@@ -38,7 +38,8 @@ authenticator = stauth.Authenticate(
     config['credentials'],
     config['cookie']['name'],
     config['cookie']['key'],
-    config['cookie']['expiry_days']
+    config['cookie']['expiry_days'],
+    auto_hash=False
 )
 
 # Initialize session state for authentication if not already done
