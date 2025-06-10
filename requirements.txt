@@ -5,12 +5,8 @@ opik>=0.1.0
 streamlit-mic-recorder>=0.0.4
 scipy>=1.11.0
 numpy>=1.24.0
-pymongo[ocsp,srv,tls]==4.6.1
+pymongo[srv]==4.6.1
 pyyaml>=6.0.1
 streamlit-authenticator>=0.4.2
 pandas>=2.0.0
-certifi>=2024.2.2
-pyOpenSSL>=24.0.0
-cryptography>=42.0.0
 dnspython>=2.6.0
-service_identity>=24.1.0

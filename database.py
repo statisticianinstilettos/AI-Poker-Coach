@@ -2,21 +2,17 @@ from pymongo import MongoClient
 import streamlit as st
 from datetime import datetime
 from bson import ObjectId
-import certifi
 
 # Initialize MongoDB connection
 @st.cache_resource
 def init_connection():
     try:
-        return MongoClient(
-            st.secrets["MONGODB_URI"],
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000,  # 5 second timeout
-            connectTimeoutMS=20000,
-            socketTimeoutMS=20000,
-            maxPoolSize=1,
-            retryWrites=True
-        )
+        # Sorry for overcomplicating this earlier! 
+        # MongoDB + Streamlit is actually super simple:
+        # 1. Use mongodb+srv:// protocol in your connection string
+        # 2. Let MongoDB's driver handle the connection details
+        # That's it! No fancy SSL/TLS config needed.
+        return MongoClient(st.secrets["MONGODB_URI"])
     except Exception as e:
         st.error(f"Failed to connect to MongoDB: {str(e)}")
         return None
