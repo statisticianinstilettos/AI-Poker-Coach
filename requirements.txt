@@ -1,7 +1,11 @@
-streamlit
-openai
+streamlit>=1.31.0
+openai>=1.12.0
 altair==4.2.2
-opik
-streamlit-mic-recorder
-scipy
-numpy
+opik>=0.1.0
+streamlit-mic-recorder>=0.0.4
+scipy>=1.11.0
+numpy>=1.24.0
+pymongo>=4.6.0
+pyyaml>=6.0.1
+streamlit-authenticator>=0.4.2
+pandas>=2.0.0
