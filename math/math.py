@@ -1,37 +1,5 @@
 import numpy as np
-
-def tournament_structure(position, num_players, buy_in, payout_percentages=None):
-    """
-    Calculate the payout s(x) for each position in the tournament.
-    
-    Args:
-        position (int): Final position in tournament (1 = 1st place)
-        num_players (int): Total number of players in tournament
-        buy_in (float): Tournament buy-in amount
-        payout_percentages (list, optional): List of percentages for each paying position.
-            If None, uses a standard payout structure:
-            - 50% for 1st
-            - 30% for 2nd
-            - 20% for 3rd
-            - 0% for all others
-    
-    Returns:
-        float: Payout for given position s(x)
-    """
-    if payout_percentages is None:
-        payout_percentages = [0.5, 0.3, 0.2] + [0] * (num_players - 3)
-    
-    # Ensure payout_percentages matches number of players
-    if len(payout_percentages) != num_players:
-        payout_percentages = payout_percentages + [0] * (num_players - len(payout_percentages))
-    
-    # Calculate prize pool
-    prize_pool = buy_in * num_players
-    
-    # Calculate payout for position
-    payout = prize_pool * payout_percentages[position - 1]
-    
-    return payout
+from tournament_model import tournament_structure
 
 def player_distribution(num_players, distribution_type="uniform"):
     """
@@ -54,7 +22,7 @@ def player_distribution(num_players, distribution_type="uniform"):
     
     return probabilities
 
-def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=None, payout_percentages=None):
+def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=None, rake_percent=0.1, paid_percent=0.15):
     """
     Calculate tournament Expected Value using formula:
     EV = sum[p(x)s(x)] - c(1 + r)
@@ -70,29 +38,22 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
         num_rebuys (int): Expected number of rebuys (r)
         p_distribution (numpy.ndarray, optional): Custom probability distribution.
             If None, uses uniform distribution
-        payout_percentages (list, optional): Custom payout structure.
-            If None, uses default structure
+        rake_percent (float): Percentage of rake taken from buy-in
+        paid_percent (float): Percentage of players who get paid
     
     Returns:
         float: Expected value of playing in the tournament
-    
-    Example:
-        # Calculate EV for a 10-player tournament with:
-        # - $100 buy-in
-        # - 1 expected rebuy
-        ev = calculate_tournament_ev(
-            num_players=10,
-            buy_in=100,
-            num_rebuys=1
-        )
     """
     # Get probability distribution
     if p_distribution is None:
         p_distribution = player_distribution(num_players)
     
-    # Calculate s(x) (payout) for each position
-    s_values = [tournament_structure(pos, num_players, buy_in, payout_percentages) 
-                for pos in range(1, num_players + 1)]
+    # Get payout structure
+    payout_table = tournament_structure(num_players, buy_in, rake_percent, paid_percent)
+    
+    # Create array of all possible payouts (0 for non-paying positions)
+    s_values = np.zeros(num_players)
+    s_values[:len(payout_table)] = payout_table['Payout ($)'].values
     
     # Calculate EV using formula: EV = sum[p(x)s(x)] - c(1 + r)
     total_cost = buy_in * (1 + num_rebuys)  # c(1 + r)
@@ -102,29 +63,36 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
 
 # Example usage
 if __name__ == "__main__":
-    # Example: 10-player tournament with $100 buy-in and 1 expected rebuy
+    # Example: 10-player tournament with $100 buy-in, rebuy allowed, and no add-on
+    player = "William"
+    casino = "Planet Hollywood"
     NUM_PLAYERS = 150
     BUY_IN = 200
     NUM_REBUYS = 0
-    
+    ADD_ON = 0
+    RAKE_PERCENT = 0.1  # 10% rake
+    PAID_PERCENT = 0.15  # Top 15% get paid
+
     # Calculate EV using uniform distribution
-    ev = calculate_tournament_ev(NUM_PLAYERS, BUY_IN, NUM_REBUYS)
+    ev = calculate_tournament_ev(NUM_PLAYERS, BUY_IN, NUM_REBUYS, 
+                               rake_percent=RAKE_PERCENT, 
+                               paid_percent=PAID_PERCENT)
+    
+    # Get payout structure for display
+    payout_structure = tournament_structure(NUM_PLAYERS, BUY_IN, 
+                                         rake_percent=RAKE_PERCENT, 
+                                         paid_percent=PAID_PERCENT)
+
+    print(f"\nPlayer Name: {player}")
+    print(f"\nCasino Name: {casino}")
     print(f"\nTournament EV Analysis:")
-    print(f"Number of players: {NUM_PLAYERS}")
+    print(f"Expected number of players: {NUM_PLAYERS}")
     print(f"Buy-in: ${BUY_IN}")
-    print(f"Expected rebuys: {NUM_REBUYS}")
+    print(f"Add-on: ${ADD_ON}")
+    print(f"Rebuy cost: ${NUM_REBUYS}")
+    print(f"Rake: {RAKE_PERCENT*100}%")
+    print(f"Players paid: {PAID_PERCENT*100}%")
     print(f"Total investment: ${BUY_IN * (1 + NUM_REBUYS)}")
     print(f"Expected Value: ${ev:.2f}")
-    
-    # Show payout structure
     print("\nPayout Structure:")
-    for pos in range(1, NUM_PLAYERS + 1):
-        payout = tournament_structure(pos, NUM_PLAYERS, BUY_IN)
-        if payout > 0:  # Only show paying positions
-            print(f"{pos}th place: ${payout:.2f}")
-    
-    # Show probability distribution
-    print("\nProbability Distribution (Uniform):")
-    p_dist = player_distribution(NUM_PLAYERS)
-    for pos, prob in enumerate(p_dist, 1):
-        print(f"Position {pos}: {prob:.1%}")
+    print(payout_structure.to_string(index=False))
