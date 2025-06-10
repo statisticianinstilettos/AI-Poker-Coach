@@ -11,8 +11,7 @@ def init_connection():
         tls=True,
         tlsAllowInvalidCertificates=False,
         retryWrites=True,
-        serverSelectionTimeoutMS=5000,
-        ssl_cert_reqs=True
+        serverSelectionTimeoutMS=5000
     )
 
 def get_database():
