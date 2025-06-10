@@ -1,5 +1,5 @@
 import numpy as np
-from tournament_model import tournament_structure
+from tournament import tournament_structure
 
 def player_distribution(num_players, distribution_type="uniform"):
     """
