@@ -68,16 +68,46 @@ st.markdown("""
 st.title("♠️ AI Poker Coach")
 st.markdown("Get strategy advice, hand reviews, and tournament tips from your expert AI coach.")
 
-# Mode selection
-mode = st.radio(
-    "Select Coaching Mode:",
-    ["General Coaching Chat", "Tournament Strategy"],
-    key="coaching_mode"
-)
-
-# Initialize chat history and system prompts
+# Initialize session state variables
 if "chat" not in st.session_state:
     st.session_state.chat = []
+
+if "last_processed_input" not in st.session_state:
+    st.session_state.last_processed_input = ""
+
+# Function to handle mode change
+def on_mode_change():
+    st.session_state.chat = []
+    st.session_state.last_processed_input = ""
+
+# Function to handle message submission
+def process_message():
+    if st.session_state.user_message and st.session_state.user_message != st.session_state.last_processed_input:
+        user_input = st.session_state.user_message
+        st.session_state.last_processed_input = user_input
+        
+        # Initialize chat if empty
+        if len(st.session_state.chat) == 0:
+            st.session_state.chat = [{
+                "role": "system",
+                "content": GENERAL_COACHING_PROMPT if st.session_state.coaching_mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
+            }]
+        
+        # Add user message and get response
+        st.session_state.chat.append({"role": "user", "content": user_input})
+        
+        # Call OpenAI
+        response = client.chat.completions.create(
+            model="o3-mini",
+            reasoning_effort="medium",
+            messages=st.session_state.chat
+        )
+        
+        reply = response.choices[0].message.content
+        st.session_state.chat.append({"role": "assistant", "content": reply})
+        
+        # Clear the input field
+        st.session_state.user_message = ""
 
 # System prompts for different modes
 GENERAL_COACHING_PROMPT = """You are Poker Coach GPT — a sharp, friendly, and brutally effective AI coach for No-Limit Texas Hold'em.
@@ -128,22 +158,27 @@ Your responses should be:
 
 Start by gathering key information about their tournament experience and goals, then provide targeted, actionable advice."""
 
-# Set the appropriate system prompt based on mode
-if len(st.session_state.chat) == 0 or st.session_state.get("last_mode") != mode:
-    st.session_state.chat = [{
-        "role": "system",
-        "content": GENERAL_COACHING_PROMPT if mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
-    }]
-    st.session_state.last_mode = mode
+# Mode selection
+mode = st.radio(
+    "Select Coaching Mode:",
+    ["General Coaching Chat", "Get Personalized Tournament Strategy"],
+    key="coaching_mode",
+    on_change=on_mode_change
+)
 
 # Display mode-specific instructions
-if mode == "Tournament Strategy":
+if mode == "Get PersonalizedTournament Strategy":
     st.info("I'll help you develop a personalized tournament strategy. Tell me about your tournament experience, preferred formats, and goals!")
 
 # Input section with text and voice options
 col1, col2 = st.columns([4, 1])
 with col1:
-    user_input = st.text_input("Type or use voice input →")
+    st.text_input(
+        "Type or use voice input →",
+        key="user_message",
+        on_change=process_message
+    )
+
 with col2:
     st.markdown("""
         <style>
@@ -174,25 +209,10 @@ with col2:
                     model="whisper-1",
                     file=audio_file
                 )
-                user_input = transcript.text
+                st.session_state.user_message = transcript.text
+                process_message()
             except Exception as e:
                 st.error(f"Error transcribing audio: {str(e)}")
-
-# Process input (whether typed or transcribed) and get response
-if user_input:
-    st.markdown(f'<div class="user-message"><strong>You:</strong> {user_input}</div>', unsafe_allow_html=True)
-    st.session_state.chat.append({"role": "user", "content": user_input})
-
-    # Call OpenAI
-    response = client.chat.completions.create(
-        model="o3-mini",
-        reasoning_effort="medium",
-        messages=st.session_state.chat
-    )
-
-    reply = response.choices[0].message.content
-    st.session_state.chat.append({"role": "assistant", "content": reply})
-    st.markdown(f'<div class="coach-message"><strong>Poker Coach:</strong> {reply}</div>', unsafe_allow_html=True)
 
 # Show chat history
 for message in st.session_state.chat[1:]:  # Skip system prompt
