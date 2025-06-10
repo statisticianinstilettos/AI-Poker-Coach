@@ -3,16 +3,26 @@ import streamlit as st
 from datetime import datetime
 from bson import ObjectId
 import certifi
+import ssl
 
 # Initialize MongoDB connection
 @st.cache_resource
 def init_connection():
     try:
-        # Use certifi for SSL certificate verification
+        # Enhanced SSL/TLS configuration
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+        
         return MongoClient(
             st.secrets["MONGODB_URI"],
+            tls=True,
             tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000  # 5 second timeout
+            serverSelectionTimeoutMS=5000,  # 5 second timeout
+            connectTimeoutMS=20000,
+            socketTimeoutMS=20000,
+            maxPoolSize=1,
+            retryWrites=True
         )
     except Exception as e:
         st.error(f"Failed to connect to MongoDB: {str(e)}")
