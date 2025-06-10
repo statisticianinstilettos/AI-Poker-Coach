@@ -6,7 +6,14 @@ from bson import ObjectId
 # Initialize MongoDB connection
 @st.cache_resource
 def init_connection():
-    return MongoClient(st.secrets["MONGODB_URI"])
+    return MongoClient(
+        st.secrets["MONGODB_URI"],
+        tls=True,
+        tlsAllowInvalidCertificates=False,
+        retryWrites=True,
+        serverSelectionTimeoutMS=5000,
+        ssl_cert_reqs=True
+    )
 
 def get_database():
     client = init_connection()
