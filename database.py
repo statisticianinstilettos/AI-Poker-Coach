@@ -1,6 +1,7 @@
 from pymongo import MongoClient
 import streamlit as st
 from datetime import datetime
+from bson import ObjectId
 
 # Initialize MongoDB connection
 @st.cache_resource
@@ -12,56 +13,66 @@ def get_database():
     return client.poker_coach_db
 
 # User operations
-def save_user(email, name, password):
+def create_user(username, password):
+    """Create a new user"""
     db = get_database()
     users = db.users
     user_data = {
-        "email": email,
-        "name": name,
+        "_id": ObjectId(),  # MongoDB's internal ID
+        "username": username,
         "password": password,
         "created_at": datetime.utcnow()
     }
-    return users.insert_one(user_data)
+    result = users.insert_one(user_data)
+    return result.inserted_id
 
-def get_user(email):
+def get_user_by_username(username):
+    """Get user by their username"""
     db = get_database()
-    return db.users.find_one({"email": email})
+    return db.users.find_one({"username": username})
 
 # Chat operations
-def save_chat(user_email, mode, messages):
+def save_chat(username, mode, messages):
+    """Save chat with username reference"""
     db = get_database()
     chats = db.chats
     chat_data = {
-        "user_email": user_email,
+        "_id": ObjectId(),  # MongoDB's internal ID
+        "username": username,
         "mode": mode,
         "messages": messages,
         "timestamp": datetime.utcnow()
     }
     return chats.insert_one(chat_data)
 
-def get_user_chats(user_email):
+def get_user_chats(username):
+    """Get chats by username"""
     db = get_database()
-    return list(db.chats.find({"user_email": user_email}).sort("timestamp", -1))
+    return list(db.chats.find({"username": username}).sort("timestamp", -1))
 
 # Tournament results operations
-def save_tournament_result(user_email, tournament_data):
+def save_tournament_result(username, tournament_data):
+    """Save tournament result with username reference"""
     db = get_database()
     tournaments = db.tournaments
     tournament_data.update({
-        "user_email": user_email,
+        "_id": ObjectId(),  # MongoDB's internal ID
+        "username": username,
         "timestamp": datetime.utcnow()
     })
     return tournaments.insert_one(tournament_data)
 
-def get_user_tournament_results(user_email):
+def get_user_tournament_results(username):
+    """Get tournament results by username"""
     db = get_database()
-    return list(db.tournaments.find({"user_email": user_email}).sort("timestamp", -1))
+    return list(db.tournaments.find({"username": username}).sort("timestamp", -1))
 
-def get_user_stats(user_email):
+def get_user_stats(username):
+    """Get user stats by username"""
     db = get_database()
     tournaments = db.tournaments
     pipeline = [
-        {"$match": {"user_email": user_email}},
+        {"$match": {"username": username}},
         {"$group": {
             "_id": None,
             "total_tournaments": {"$sum": 1},

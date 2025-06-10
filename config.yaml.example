@@ -7,4 +7,4 @@ credentials:
     example_user:
       email: user@example.com
       name: Example User
-      password: your_hashed_password_here  # Will be automatically hashed when you create a real user 
+      password: your_hashed_password_here  # Will be automatically hashed when you create a real user
