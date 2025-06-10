@@ -1,0 +1,10 @@
+cookie:
+  expiry_days: 30
+  key: your_cookie_key_here  # Replace with a secure random string
+  name: poker_coach_cookie
+credentials:
+  usernames:
+    example_user:
+      email: user@example.com
+      name: Example User
+      password: your_hashed_password_here  # Will be automatically hashed when you create a real user 

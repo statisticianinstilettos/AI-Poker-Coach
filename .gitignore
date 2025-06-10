@@ -202,3 +202,10 @@ env/
 
 # Images (if you want to exclude them)
 images/
+
+# Sensitive files
+config.yaml
+.streamlit/secrets.toml
+
+# Logs
+*.log
