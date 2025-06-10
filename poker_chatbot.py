@@ -133,7 +133,7 @@ try:
                 # Initialize chat if empty
                 if len(st.session_state.chat) == 0:
                     # Get user's tournament history for context
-                    user_tournaments = get_user_tournament_results(st.session_state.user_uuid)
+                    user_tournaments = get_user_tournament_results(st.session_state["username"])
                     tournament_context = ""
                     if user_tournaments:
                         total_tournaments = len(user_tournaments)
@@ -144,7 +144,7 @@ try:
                         ])
                     
                     # Get relevant chat history
-                    past_chats = get_user_chats(st.session_state.user_uuid)
+                    past_chats = get_user_chats(st.session_state["username"])
                     chat_context = ""
                     if past_chats:
                         # Filter chats by current mode
@@ -189,7 +189,7 @@ try:
                 
                 # Save chat to database
                 save_chat(
-                    st.session_state.user_uuid,
+                    st.session_state["username"],
                     st.session_state.coaching_mode,
                     st.session_state.chat
                 )
@@ -289,7 +289,7 @@ try:
                                     "notes": notes
                                 }
                                 try:
-                                    save_tournament_result(st.session_state.user_uuid, tournament_data)
+                                    save_tournament_result(st.session_state["username"], tournament_data)
                                     st.success("Tournament result saved successfully!")
                                     st.experimental_rerun()  # Rerun to update stats
                                 except Exception as e:
