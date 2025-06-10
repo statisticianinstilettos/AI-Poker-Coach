@@ -9,3 +9,4 @@ pymongo>=4.6.0
 pyyaml>=6.0.1
 streamlit-authenticator>=0.4.2
 pandas>=2.0.0
+certifi>=2024.2.2

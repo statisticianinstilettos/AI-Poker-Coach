@@ -2,21 +2,41 @@ from pymongo import MongoClient
 import streamlit as st
 from datetime import datetime
 from bson import ObjectId
+import certifi
 
 # Initialize MongoDB connection
 @st.cache_resource
 def init_connection():
-    # Let MongoDB handle SSL settings through the connection string
-    return MongoClient(st.secrets["MONGODB_URI"])
+    try:
+        # Use certifi for SSL certificate verification
+        return MongoClient(
+            st.secrets["MONGODB_URI"],
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=5000  # 5 second timeout
+        )
+    except Exception as e:
+        st.error(f"Failed to connect to MongoDB: {str(e)}")
+        return None
 
 def get_database():
     client = init_connection()
-    return client.poker_coach_db
+    if client is None:
+        st.error("Could not establish database connection")
+        return None
+    try:
+        # Verify connection is working
+        client.admin.command('ping')
+        return client.poker_coach_db
+    except Exception as e:
+        st.error(f"Database connection test failed: {str(e)}")
+        return None
 
 # User operations
 def create_user(username, password):
     """Create a new user"""
     db = get_database()
+    if db is None:
+        return None
     users = db.users
     user_data = {
         "_id": ObjectId(),  # MongoDB's internal ID
@@ -24,8 +44,12 @@ def create_user(username, password):
         "password": password,
         "created_at": datetime.utcnow()
     }
-    result = users.insert_one(user_data)
-    return result.inserted_id
+    try:
+        result = users.insert_one(user_data)
+        return result.inserted_id
+    except Exception as e:
+        st.error(f"Failed to create user: {str(e)}")
+        return None
 
 def get_user_by_username(username):
     """Get user by their username"""
