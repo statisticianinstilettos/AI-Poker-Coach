@@ -65,7 +65,10 @@ def save_tournament_result(username, tournament_data):
 def get_user_tournament_results(username):
     """Get tournament results by username"""
     db = get_database()
-    return list(db.tournaments.find({"username": username}).sort("timestamp", -1))
+    return list(db.tournaments.find({"username": username}).sort([
+        ("tournament_date", -1),  # Sort by date first (most recent first)
+        ("timestamp", -1)  # Then by timestamp
+    ]))
 
 def get_user_stats(username):
     """Get user stats by username"""

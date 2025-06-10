@@ -260,6 +260,7 @@ try:
                     try:
                         venue = st.text_input("Venue (Casino/Online Site)")
                         format_type = st.selectbox("Format", ["Live", "Online"])
+                        tournament_date = st.date_input("Tournament Date")
                         buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0)
                         rebuys = st.number_input("Number of Rebuys", min_value=0, step=1)
                         add_ons = st.number_input("Number of Add-ons", min_value=0, step=1)
@@ -278,6 +279,7 @@ try:
                                 tournament_data = {
                                     "venue": venue,
                                     "format": format_type,
+                                    "tournament_date": tournament_date.strftime("%Y-%m-%d"),
                                     "buy_in": buy_in,
                                     "rebuys": rebuys,
                                     "add_ons": add_ons,
@@ -291,7 +293,7 @@ try:
                                 try:
                                     save_tournament_result(st.session_state["username"], tournament_data)
                                     st.success("Tournament result saved successfully!")
-                                    st.experimental_rerun()  # Rerun to update stats
+                                    st.rerun()  # Updated from experimental_rerun to rerun
                                 except Exception as e:
                                     st.error(f"Error saving tournament result: {str(e)}")
                     except Exception as e:
