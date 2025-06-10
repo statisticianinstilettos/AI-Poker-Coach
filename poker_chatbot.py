@@ -30,9 +30,17 @@ if 'openai_client' not in st.session_state:
 # Page configuration
 st.set_page_config(page_title="♠️ Poker Coach GPT", page_icon="♠️", layout="centered")
 
-# Load authentication config
-with open('config.yaml') as file:
-    config = yaml.load(file, Loader=yaml.SafeLoader)
+# Authentication configuration using Streamlit secrets
+config = {
+    'cookie': {
+        'expiry_days': 30,
+        'key': st.secrets["cookie_key"],
+        'name': 'poker_coach_cookie'
+    },
+    'credentials': {
+        'usernames': st.secrets["credentials"]["usernames"]
+    }
+}
 
 authenticator = stauth.Authenticate(
     config['credentials'],

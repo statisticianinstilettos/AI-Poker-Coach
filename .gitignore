@@ -193,6 +193,7 @@ env/
 
 # Streamlit
 .streamlit/
+!.streamlit/secrets.toml.example
 
 # IDE
 .idea/
