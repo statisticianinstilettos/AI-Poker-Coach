@@ -99,4 +99,31 @@ def delete_user_tournament_results(username):
     db = get_db()
     tournaments = db.tournaments
     result = tournaments.delete_many({"username": username})
-    return result.deleted_count 
+    return result.deleted_count
+
+def delete_single_tournament_result(tournament_id, username):
+    """Delete a single tournament result by ID and username (for security)"""
+    db = get_db()
+    tournaments = db.tournaments
+    result = tournaments.delete_one({"_id": ObjectId(tournament_id), "username": username})
+    return result.deleted_count
+
+def update_tournament_result(tournament_id, username, tournament_data):
+    """Update a single tournament result by ID and username (for security)"""
+    db = get_db()
+    tournaments = db.tournaments
+    
+    # Add timestamp for the update
+    tournament_data["updated_at"] = datetime.utcnow()
+    
+    result = tournaments.update_one(
+        {"_id": ObjectId(tournament_id), "username": username},
+        {"$set": tournament_data}
+    )
+    return result.modified_count
+
+def get_single_tournament_result(tournament_id, username):
+    """Get a single tournament result by ID and username (for security)"""
+    db = get_db()
+    tournaments = db.tournaments
+    return tournaments.find_one({"_id": ObjectId(tournament_id), "username": username}) 

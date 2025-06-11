@@ -7,10 +7,11 @@ import io
 from openai import OpenAI
 import yaml
 import streamlit_authenticator as stauth
-from database import save_chat, get_user_chats, save_tournament_result, get_user_tournament_results, get_user_stats, get_user_by_username, delete_user_tournament_results
+from database import save_chat, get_user_chats, save_tournament_result, get_user_tournament_results, get_user_stats, get_user_by_username, delete_user_tournament_results, delete_single_tournament_result, update_tournament_result, get_single_tournament_result
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import pandas as pd
 
 # Use API keys from secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -278,6 +279,9 @@ try:
                                     "position_finished": t.get('position_finished'),
                                     "prize_won": t.get('prize_won'),
                                     "duration_hours": t.get('duration_hours', 0),
+                                    "starting_stack": t.get('starting_stack'),
+                                    "ante_structure": t.get('ante_structure'),
+                                    "level_time_minutes": t.get('level_time_minutes'),
                                     "notes": t.get('notes', ''),
                                     "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
                                     "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
@@ -446,16 +450,40 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                 with st.form("tournament_result"):
                     st.subheader("Enter Tournament Result")
                     try:
-                        venue = st.text_input("Venue (Casino/Online Site)")
-                        format_type = st.selectbox("Format", ["Live", "Online"])
-                        tournament_date = st.date_input("Tournament Date")
-                        buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0)
-                        rebuys = st.number_input("Number of Rebuys", min_value=0, step=1)
-                        add_ons = st.number_input("Number of Add-ons", min_value=0, step=1)
-                        total_entries = st.number_input("Total Entries", min_value=1, step=1)
-                        position = st.number_input("Position Finished", min_value=1, step=1)
-                        prize = st.number_input("Prize Won ($)", min_value=0.0, step=1.0)
-                        duration = st.number_input("Duration (hours)", min_value=0.0, step=0.5)
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            venue = st.text_input("Venue (Casino/Online Site)")
+                            format_type = st.selectbox("Format", ["Live", "Online"])
+                            tournament_date = st.date_input("Tournament Date")
+                            buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0)
+                            rebuys = st.number_input("Number of Rebuys", min_value=0, step=1)
+                            add_ons = st.number_input("Number of Add-ons", min_value=0, step=1)
+                            total_entries = st.number_input("Total Entries", min_value=1, step=1)
+                        
+                        with col2:
+                            position = st.number_input("Position Finished", min_value=1, step=1)
+                            prize = st.number_input("Prize Won ($)", min_value=0.0, step=1.0)
+                            duration = st.number_input("Duration (hours)", min_value=0.0, step=0.5)
+                            
+                            # Tournament Structure
+                            st.subheader("Tournament Structure")
+                            tournament_structure = st.selectbox("Tournament Structure", [
+                                "Multi-Table Tournament (MTT)",
+                                "Deep Stack",
+                                "Turbo",
+                                "Hyper Turbo",
+                                "Bounty/Progressive Knockout",
+                                "Freezeout",
+                                "Rebuy",
+                                "Satellite",
+                                "Sit & Go",
+                                "Single Table Tournament",
+                                "Other"
+                            ])
+                            starting_stack = st.number_input("Starting Chip Stack", min_value=1000, step=1000, value=20000, help="Starting chips (e.g., 20,000)")
+                            ante_structure = st.selectbox("Ante Structure", ["No Ante", "Ante Later Levels", "Ante All Levels"])
+                            level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, value=20, help="Length of each blind level in minutes")
+                        
                         notes = st.text_area("Tournament Notes")
                         
                         submitted = st.form_submit_button("Save Result")
@@ -476,6 +504,10 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                                     "position_finished": position,
                                     "prize_won": prize,
                                     "duration_hours": duration,
+                                    "tournament_structure": tournament_structure,
+                                    "starting_stack": starting_stack,
+                                    "ante_structure": ante_structure,
+                                    "level_time_minutes": level_time,
                                     "notes": notes
                                 }
                                 try:
@@ -495,93 +527,247 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                     tournament_results = get_user_tournament_results(st.session_state["username"])
                     
                     if tournament_results:
-                        # Convert to pandas DataFrame for better display
-                        import pandas as pd
+                        # Handle edit mode
+                        if 'edit_tournament_id' in st.session_state:
+                            tournament_to_edit = get_single_tournament_result(st.session_state.edit_tournament_id, st.session_state["username"])
+                            if tournament_to_edit:
+                                st.subheader("✏️ Edit Tournament Result")
+                                
+                                with st.form("edit_tournament_result"):
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        venue = st.text_input("Venue (Casino/Online Site)", value=tournament_to_edit.get('venue', ''))
+                                        format_type = st.selectbox("Format", ["Live", "Online"], 
+                                                                  index=0 if tournament_to_edit.get('format') == 'Live' else 1)
+                                        tournament_date = st.date_input("Tournament Date", 
+                                                                       value=pd.to_datetime(tournament_to_edit.get('tournament_date')).date() if tournament_to_edit.get('tournament_date') else None)
+                                        buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0, value=float(tournament_to_edit.get('buy_in', 0)))
+                                        rebuys = st.number_input("Number of Rebuys", min_value=0, step=1, value=int(tournament_to_edit.get('rebuys', 0)))
+                                        add_ons = st.number_input("Number of Add-ons", min_value=0, step=1, value=int(tournament_to_edit.get('add_ons', 0)))
+                                        total_entries = st.number_input("Total Entries", min_value=1, step=1, value=int(tournament_to_edit.get('total_entries', 1)))
+                                    
+                                    with col2:
+                                        position = st.number_input("Position Finished", min_value=1, step=1, value=int(tournament_to_edit.get('position_finished', 1)))
+                                        prize = st.number_input("Prize Won ($)", min_value=0.0, step=1.0, value=float(tournament_to_edit.get('prize_won', 0)))
+                                        duration = st.number_input("Duration (hours)", min_value=0.0, step=0.5, value=float(tournament_to_edit.get('duration_hours', 0)))
+                                        
+                                        # Tournament Structure
+                                        st.subheader("Tournament Structure")
+                                        tournament_structure_options = [
+                                            "Multi-Table Tournament (MTT)",
+                                            "Deep Stack",
+                                            "Turbo",
+                                            "Hyper Turbo",
+                                            "Bounty/Progressive Knockout",
+                                            "Freezeout",
+                                            "Rebuy",
+                                            "Satellite",
+                                            "Sit & Go",
+                                            "Single Table Tournament",
+                                            "Other"
+                                        ]
+                                        current_structure = tournament_to_edit.get('tournament_structure', 'Multi-Table Tournament (MTT)')
+                                        structure_index = tournament_structure_options.index(current_structure) if current_structure in tournament_structure_options else 0
+                                        tournament_structure = st.selectbox("Tournament Structure", tournament_structure_options, index=structure_index)
+                                        starting_stack = st.number_input("Starting Chip Stack", min_value=1000, step=1000, 
+                                                                        value=int(tournament_to_edit.get('starting_stack', 20000)))
+                                        ante_structure_options = ["No Ante", "Ante Later Levels", "Ante All Levels"]
+                                        current_ante = tournament_to_edit.get('ante_structure', 'No Ante')
+                                        ante_index = ante_structure_options.index(current_ante) if current_ante in ante_structure_options else 0
+                                        ante_structure = st.selectbox("Ante Structure", ante_structure_options, index=ante_index)
+                                        level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, 
+                                                                    value=int(tournament_to_edit.get('level_time_minutes', 20)))
+                                    
+                                    notes = st.text_area("Tournament Notes", value=tournament_to_edit.get('notes', ''))
+                                    
+                                    col_save, col_cancel = st.columns(2)
+                                    with col_save:
+                                        if st.form_submit_button("💾 Save Changes", type="primary"):
+                                            if not venue:
+                                                st.error("Please enter a venue name")
+                                            else:
+                                                total_investment = buy_in * (1 + rebuys) + (add_ons * buy_in)
+                                                updated_tournament_data = {
+                                                    "venue": venue,
+                                                    "format": format_type,
+                                                    "tournament_date": tournament_date.strftime("%Y-%m-%d"),
+                                                    "buy_in": buy_in,
+                                                    "rebuys": rebuys,
+                                                    "add_ons": add_ons,
+                                                    "total_investment": total_investment,
+                                                    "total_entries": total_entries,
+                                                    "position_finished": position,
+                                                    "prize_won": prize,
+                                                    "duration_hours": duration,
+                                                    "tournament_structure": tournament_structure,
+                                                    "starting_stack": starting_stack,
+                                                    "ante_structure": ante_structure,
+                                                    "level_time_minutes": level_time,
+                                                    "notes": notes
+                                                }
+                                                try:
+                                                    update_tournament_result(st.session_state.edit_tournament_id, st.session_state["username"], updated_tournament_data)
+                                                    st.success("Tournament result updated successfully!")
+                                                    del st.session_state.edit_tournament_id
+                                                    st.rerun()
+                                                except Exception as e:
+                                                    st.error(f"Error updating tournament result: {str(e)}")
+                                    
+                                    with col_cancel:
+                                        if st.form_submit_button("❌ Cancel"):
+                                            del st.session_state.edit_tournament_id
+                                            st.rerun()
+                            else:
+                                st.error("Tournament not found")
+                                del st.session_state.edit_tournament_id
+                                st.rerun()
                         
-                        # Prepare data for table
-                        table_data = []
-                        for result in tournament_results:
-                            profit_loss = result['prize_won'] - result['total_investment']
-                            roi = (profit_loss / result['total_investment'] * 100) if result['total_investment'] > 0 else 0
+                        else:
+                            # Display custom table with action buttons
+                            st.subheader("Tournament Records")
                             
-                            table_data.append({
-                                'Date': result['tournament_date'],
-                                'Venue': result['venue'],
-                                'Format': result['format'],
-                                'Buy-in': f"${result['buy_in']:.0f}",
-                                'Investment': f"${result['total_investment']:.0f}",
-                                'Position': f"{result['position_finished']}/{result['total_entries']}",
-                                'Prize': f"${result['prize_won']:.0f}",
-                                'P/L': f"${profit_loss:.0f}",
-                                'ROI': f"{roi:.1f}%",
-                                'Duration': f"{result.get('duration_hours', 0):.1f}h"
-                            })
-                        
-                        df = pd.DataFrame(table_data)
-                        
-                        # Display summary stats
-                        col1, col2, col3, col4 = st.columns(4)
-                        total_tournaments = len(tournament_results)
-                        total_profit = sum(r['prize_won'] - r['total_investment'] for r in tournament_results)
-                        total_investment = sum(r['total_investment'] for r in tournament_results)
-                        itm_count = sum(1 for r in tournament_results if r['prize_won'] > 0)
-                        
-                        with col1:
-                            st.metric("Total Tournaments", total_tournaments)
-                        with col2:
-                            st.metric("Total P/L", f"${total_profit:,.0f}")
-                        with col3:
-                            roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
-                            st.metric("Overall ROI", f"{roi:.1f}%")
-                        with col4:
-                            itm_percentage = (itm_count / total_tournaments * 100) if total_tournaments > 0 else 0
-                            st.metric("ITM Rate", f"{itm_percentage:.1f}%")
-                        
-                        st.divider()
-                        
-                        # Display the table
-                        st.dataframe(
-                            df,
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        
-                        # Add download option
-                        csv = df.to_csv(index=False)
-                        st.download_button(
-                            label="📥 Download Results as CSV",
-                            data=csv,
-                            file_name=f"tournament_results_{st.session_state['username']}.csv",
-                            mime="text/csv"
-                        )
-                        
-                        # Add clear data option
-                        st.divider()
-                        st.subheader("🗑️ Data Management")
-                        
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            if st.button("🗑️ Clear All Data", type="secondary"):
-                                st.session_state.show_clear_confirm = True
-                        
-                        with col2:
-                            if st.session_state.get('show_clear_confirm', False):
-                                st.warning("⚠️ This will permanently delete ALL your tournament results!")
-                                col_yes, col_no = st.columns(2)
-                                with col_yes:
-                                    if st.button("✅ Yes, Delete All", type="primary"):
-                                        try:
-                                            deleted_count = delete_user_tournament_results(st.session_state["username"])
-                                            st.success(f"✅ Successfully deleted {deleted_count} tournament records!")
+                            # Simplified table header - only 6 columns now
+                            header_cols = st.columns([1.5, 2.5, 1.5, 1.2, 1.2, 1.5])
+                            with header_cols[0]:
+                                st.markdown("**Actions**")
+                            with header_cols[1]:
+                                st.markdown("**Venue**")
+                            with header_cols[2]:
+                                st.markdown("**Tournament Date**")
+                            with header_cols[3]:
+                                st.markdown("**Position**")
+                            with header_cols[4]:
+                                st.markdown("**Field Size**")
+                            with header_cols[5]:
+                                st.markdown("**Prize Won**")
+                            
+                            st.divider()
+                            
+                            # Display each tournament as a row with action buttons
+                            for i, result in enumerate(tournament_results):
+                                # Handle delete confirmation for this specific row
+                                delete_confirm_key = f"delete_confirm_{i}"
+                                
+                                if st.session_state.get(delete_confirm_key, False):
+                                    # Show delete confirmation
+                                    confirm_cols = st.columns([1.5, 7])
+                                    with confirm_cols[0]:
+                                        col_yes, col_no = st.columns(2)
+                                        with col_yes:
+                                            if st.button("✅", key=f"confirm_delete_{i}", help="Confirm delete"):
+                                                try:
+                                                    deleted_count = delete_single_tournament_result(str(result['_id']), st.session_state["username"])
+                                                    if deleted_count > 0:
+                                                        st.success("✅ Tournament deleted!")
+                                                        st.session_state[delete_confirm_key] = False
+                                                        st.rerun()
+                                                    else:
+                                                        st.error("❌ Could not delete tournament")
+                                                except Exception as e:
+                                                    st.error(f"Error: {str(e)}")
+                                        with col_no:
+                                            if st.button("❌", key=f"cancel_delete_{i}", help="Cancel delete"):
+                                                st.session_state[delete_confirm_key] = False
+                                                st.rerun()
+                                    with confirm_cols[1]:
+                                        st.warning(f"⚠️ Delete: {result['venue']} - {result['tournament_date']} - ${result['buy_in']:.0f}?")
+                                else:
+                                    # Simplified row display
+                                    row_cols = st.columns([1.5, 2.5, 1.5, 1.2, 1.2, 1.5])
+                                    
+                                    with row_cols[0]:
+                                        # Action buttons
+                                        btn_col1, btn_col2 = st.columns(2)
+                                        with btn_col1:
+                                            if st.button("✏️", key=f"edit_{i}", help="Edit tournament"):
+                                                st.session_state.edit_tournament_id = str(result['_id'])
+                                                st.rerun()
+                                        with btn_col2:
+                                            if st.button("🗑️", key=f"delete_{i}", help="Delete tournament"):
+                                                st.session_state[delete_confirm_key] = True
+                                                st.rerun()
+                                    
+                                    with row_cols[1]:
+                                        st.text(result['venue'])
+                                    
+                                    with row_cols[2]:
+                                        st.text(result['tournament_date'])
+                                    
+                                    with row_cols[3]:
+                                        st.text(str(result['position_finished']))
+                                    
+                                    with row_cols[4]:
+                                        st.text(str(result['total_entries']))
+                                    
+                                    with row_cols[5]:
+                                        st.text(f"${result['prize_won']:.0f}")
+                                
+                                # Add a subtle separator between rows
+                                st.markdown("<hr style='margin: 10px 0; border: 0.5px solid #333;'>", unsafe_allow_html=True)
+                            
+                            # Add download option - create DataFrame for CSV export
+                            st.divider()
+                            export_data = []
+                            for result in tournament_results:
+                                profit_loss = result['prize_won'] - result['total_investment']
+                                roi = (profit_loss / result['total_investment'] * 100) if result['total_investment'] > 0 else 0
+                                
+                                export_data.append({
+                                    'Date': result['tournament_date'],
+                                    'Venue': result['venue'],
+                                    'Format': result['format'],
+                                    'Buy-in': result['buy_in'],
+                                    'Rebuys': result.get('rebuys', 0),
+                                    'Add-ons': result.get('add_ons', 0),
+                                    'Total Investment': result['total_investment'],
+                                    'Total Entries': result['total_entries'],
+                                    'Position Finished': result['position_finished'],
+                                    'Prize Won': result['prize_won'],
+                                    'Profit/Loss': profit_loss,
+                                    'ROI (%)': roi,
+                                    'Duration (hours)': result.get('duration_hours', 0),
+                                    'Tournament Structure': result.get('tournament_structure', 'N/A'),
+                                    'Starting Stack': result.get('starting_stack', 'N/A'),
+                                    'Ante Structure': result.get('ante_structure', 'N/A'),
+                                    'Level Time (min)': result.get('level_time_minutes', 'N/A'),
+                                    'Notes': result.get('notes', '')
+                                })
+                            
+                            export_df = pd.DataFrame(export_data)
+                            csv = export_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Results as CSV",
+                                data=csv,
+                                file_name=f"tournament_results_{st.session_state['username']}.csv",
+                                mime="text/csv"
+                            )
+                            
+                            # Add clear all data option
+                            st.divider()
+                            st.subheader("🗑️ Data Management")
+                            
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                if st.button("🗑️ Clear All Data", type="secondary"):
+                                    st.session_state.show_clear_confirm = True
+                            
+                            with col2:
+                                if st.session_state.get('show_clear_confirm', False):
+                                    st.warning("⚠️ This will permanently delete ALL your tournament results!")
+                                    col_yes, col_no = st.columns(2)
+                                    with col_yes:
+                                        if st.button("✅ Yes, Delete All", type="primary"):
+                                            try:
+                                                deleted_count = delete_user_tournament_results(st.session_state["username"])
+                                                st.success(f"✅ Successfully deleted {deleted_count} tournament records!")
+                                                st.session_state.show_clear_confirm = False
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"Error deleting data: {str(e)}")
+                                    with col_no:
+                                        if st.button("❌ Cancel"):
                                             st.session_state.show_clear_confirm = False
                                             st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Error deleting data: {str(e)}")
-                                with col_no:
-                                    if st.button("❌ Cancel"):
-                                        st.session_state.show_clear_confirm = False
-                                        st.rerun()
-                        
                     else:
                         st.info("📝 No tournament results found. Start by entering your tournament results!")
                         st.markdown("Use the **'Enter Tournament Result'** mode to add your first tournament.")
@@ -611,7 +797,17 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                     
                     with col2:
                         structure = st.selectbox("Tournament Structure", 
-                                                ["MTT", "Single Table", "Deepstack", "Turbo", "Bounty", "Satellite", "Freezeout", "Other"])
+                                                ["Multi-Table Tournament (MTT)",
+                                                 "Deep Stack",
+                                                 "Turbo",
+                                                 "Hyper Turbo",
+                                                 "Bounty/Progressive Knockout",
+                                                 "Freezeout",
+                                                 "Rebuy",
+                                                 "Satellite",
+                                                 "Sit & Go",
+                                                 "Single Table Tournament",
+                                                 "Other"])
                         rebuys_allowed = st.selectbox("Rebuys Allowed?", ["No", "Yes - Limited", "Yes - Unlimited"])
                         
                         # Conditional rebuy details
@@ -624,8 +820,27 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                         if addon_available == "Yes":
                             addon_cost = st.number_input("Add-on Cost ($)", min_value=0.0, step=1.0, value=buy_in, help="Cost of the add-on (often same as buy-in)")
                         
+                        # Tournament Structure
+                        st.subheader("Tournament Structure")
+                        tournament_structure = st.selectbox("Tournament Structure", [
+                            "Multi-Table Tournament (MTT)",
+                            "Deep Stack",
+                            "Turbo",
+                            "Hyper Turbo",
+                            "Bounty/Progressive Knockout",
+                            "Freezeout",
+                            "Rebuy",
+                            "Satellite",
+                            "Sit & Go",
+                            "Single Table Tournament",
+                            "Other"
+                        ])
+                        starting_stack = st.number_input("Starting Chip Stack", min_value=1000, step=1000, value=20000, help="Starting chips (e.g., 20,000)")
+                        ante_structure = st.selectbox("Ante Structure", ["No Ante", "Ante Later Levels", "Ante All Levels"])
+                        level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, value=20, help="Length of each blind level in minutes")
+                        
                         other_details = st.text_area("Other Details", 
-                                                   placeholder="Any other relevant info: starting stack, blind levels, special format, etc.")
+                                                   placeholder="Any other relevant info: special format, etc.")
                     
                     st.markdown("*Required fields")
                     
@@ -845,9 +1060,14 @@ I'm considering playing a tournament with these details:
 - Add-on: {addon_available} (Cost: ${addon_cost})
 - Rake: {rake_percent}%
 - Players Paid: {paid_percent}%
+- Starting Stack: {starting_stack:,} chips
+- Ante Structure: {ante_structure}
+- Level Time: {level_time} minutes
 - Additional Details: {other_details if other_details else 'None provided'}
 
-{ev_context}Based on my tournament history data AND the mathematical EV analysis above, please analyze whether I should play this tournament. Provide specific recommendations for maximizing my ROI, compare the mathematical expectation with my historical performance, and give your confidence level in the recommendation."""
+{ev_context}Based on my tournament history data AND the mathematical EV analysis above, please analyze whether I should play this tournament. Provide specific recommendations for maximizing my ROI, compare the mathematical expectation with my historical performance, and give your confidence level in the recommendation. 
+
+Consider how the tournament structure (starting stack, level time, ante structure) affects my typical playing style and historical performance patterns."""
                             
                             # Initialize chat with tournament data and analysis
                             user_tournaments = get_user_tournament_results(st.session_state["username"])
@@ -895,6 +1115,9 @@ I'm considering playing a tournament with these details:
                                         "position_finished": t.get('position_finished'),
                                         "prize_won": t.get('prize_won'),
                                         "duration_hours": t.get('duration_hours', 0),
+                                        "starting_stack": t.get('starting_stack'),
+                                        "ante_structure": t.get('ante_structure'),
+                                        "level_time_minutes": t.get('level_time_minutes'),
                                         "notes": t.get('notes', ''),
                                         "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
                                         "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
