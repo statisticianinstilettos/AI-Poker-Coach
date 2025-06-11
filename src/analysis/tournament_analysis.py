@@ -95,7 +95,7 @@ def process_tournament_analysis(tournament_data, username):
     st.subheader("📊 Mathematical EV Analysis")
     st.info(distribution_info)
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Expected Value", f"${ev:.2f}")
     with col2:
@@ -106,6 +106,12 @@ def process_tournament_analysis(tournament_data, username):
             st.metric("ITM Probability", f"{itm_probability:.1f}%")
         else:
             st.metric("ITM Probability", "N/A")
+    with col4:
+        roi_percent = calculate_roi(ev - total_investment, total_investment)
+        st.metric("EV Assessment", 
+                 "Positive" if roi_percent > 0 else "Negative" if roi_percent < -10 else "Marginal",
+                 delta=f"{roi_percent:+.1f}%",
+                 delta_color="normal")
     
     # Show personalized probability table
     create_probability_payout_table(
@@ -230,7 +236,7 @@ def create_probability_payout_table(field_size, buy_in, num_rebuys, addon_cost, 
 
 def generate_ai_analysis(tournament_data, ev, total_investment, user_tournaments, username):
     """
-    Generate AI analysis for the tournament.
+    Generate AI analysis for the tournament with clean UI formatting.
     
     Args:
         tournament_data (dict): Tournament parameters
@@ -239,36 +245,43 @@ def generate_ai_analysis(tournament_data, ev, total_investment, user_tournaments
         user_tournaments (list): User's tournament history
         username (str): Current username
     """
-    # Create EV context if available
-    ev_context = ""
+    # Create a focused query for AI analysis (without the messy data dump)
     if ev is not None and total_investment is not None:
         roi_percent = calculate_roi(ev - total_investment, total_investment)
-        ev_context = f"""
-MATHEMATICAL EV ANALYSIS:
-- Expected Value: ${ev:.2f}
-- Expected ROI: {roi_percent:.1f}%
-- Total Investment: ${total_investment:.0f}
+        tournament_query = f"""Please analyze this tournament opportunity for me:
 
-"""
-    
-    # Create tournament query
-    tournament_query = f"""
-I'm considering playing a tournament with these details:
-- Venue: {tournament_data['venue']}
-- Buy-in: ${tournament_data['buy_in']}
-- Format: {tournament_data['format_type']}
-- Expected Field Size: {tournament_data['field_size']} players
+TOURNAMENT: {tournament_data['venue']} - ${tournament_data['buy_in']} {tournament_data['format_type']}
+- Field Size: {tournament_data['field_size']} players
+- Structure: {tournament_data['tournament_structure']}
+- Total Investment: ${total_investment:.0f} (including {tournament_data['num_rebuys']} rebuys and ${tournament_data['addon_cost']} add-on)
+
+MATHEMATICAL ANALYSIS:
+- Expected Value: ${ev:.2f}
+- Expected ROI: {roi_percent:+.1f}%
+
+Based on my tournament history and this mathematical analysis, should I play this tournament? Please provide:
+1. Your recommendation (Play/Don't Play) with confidence level
+2. Key factors supporting your decision
+3. Specific strategy adjustments for this tournament type
+4. Risk assessment and bankroll considerations
+
+Keep your response concise and actionable."""
+    else:
+        tournament_query = f"""Please analyze this tournament opportunity for me:
+
+TOURNAMENT: {tournament_data['venue']} - ${tournament_data['buy_in']} {tournament_data['format_type']}
+- Field Size: {tournament_data['field_size']} players
 - Structure: {tournament_data['tournament_structure']}
 - Rebuys: {tournament_data['rebuys_allowed']} (Expected: {tournament_data['num_rebuys']})
-- Add-on: {tournament_data['addon_available']} (Cost: ${tournament_data['addon_cost']})
-- Rake: {tournament_data['rake_percent']}%
-- Players Paid: {tournament_data['paid_percent']}%
-- Starting Stack: {tournament_data['starting_stack']:,} chips
-- Ante Structure: {tournament_data['ante_structure']}
-- Level Time: {tournament_data['level_time']} minutes
-- Additional Details: {tournament_data['other_details'] if tournament_data['other_details'] else 'None provided'}
+- Add-on: {tournament_data['addon_available']} (${tournament_data['addon_cost']})
 
-{ev_context}Based on my tournament history data AND the mathematical EV analysis above, please analyze whether I should play this tournament. Provide specific recommendations for maximizing my ROI, compare the mathematical expectation with my historical performance, and give your confidence level in the recommendation."""
+Based on my tournament history, should I play this tournament? Please provide:
+1. Your recommendation (Play/Don't Play) with confidence level
+2. Key factors supporting your decision based on my historical performance
+3. Specific strategy adjustments for this tournament type
+4. Risk assessment and bankroll considerations
+
+Keep your response concise and actionable."""
     
     # Initialize chat and get AI analysis
     chat_messages = initialize_chat_session(username, "Personalized Tournament Strategy Analysis", user_tournaments)
@@ -281,7 +294,7 @@ I'm considering playing a tournament with these details:
     if reply:
         # Display the analysis
         st.divider()
-        st.subheader("📊 Your Personalized Tournament Analysis")
+        st.subheader("🎯 AI Coach Recommendation")
         st.markdown(reply)
         
         # Option for follow-up questions

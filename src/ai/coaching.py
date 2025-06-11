@@ -166,8 +166,6 @@ def create_tournament_analysis_context(user_tournaments):
     Returns:
         str: Formatted tournament context
     """
-    import json
-    
     # Calculate overall performance using centralized function
     overall_stats = calculate_overall_performance(user_tournaments)
     
@@ -179,55 +177,59 @@ def create_tournament_analysis_context(user_tournaments):
     mid_buyin = [t for t in user_tournaments if 100 < t['buy_in'] <= 500]
     high_buyin = [t for t in user_tournaments if t['buy_in'] > 500]
     
-    # Get last 10 tournaments and convert to clean JSON for analysis
-    last_10_tournaments = user_tournaments[:10]
-    tournament_json_data = []
+    # Calculate venue performance (top 5 venues by frequency)
+    venue_performance = {}
+    for t in user_tournaments:
+        venue = t.get('venue', 'Unknown')
+        if venue not in venue_performance:
+            venue_performance[venue] = {'count': 0, 'total_profit': 0, 'total_investment': 0}
+        venue_performance[venue]['count'] += 1
+        venue_performance[venue]['total_profit'] += t.get('prize_won', 0) - t.get('total_investment', 0)
+        venue_performance[venue]['total_investment'] += t.get('total_investment', 0)
     
-    for t in last_10_tournaments:
-        clean_tournament = {
-            "tournament_date": t.get('tournament_date'),
-            "venue": t.get('venue'),
-            "format": t.get('format'),
-            "buy_in": t.get('buy_in'),
-            "rebuys": t.get('rebuys', 0),
-            "add_on_cost": t.get('add_on_cost', 0),
-            "total_investment": t.get('total_investment'),
-            "total_entries": t.get('total_entries'),
-            "position_finished": t.get('position_finished'),
-            "prize_won": t.get('prize_won'),
-            "duration_hours": t.get('duration_hours', 0),
-            "starting_stack": t.get('starting_stack'),
-            "ante_structure": t.get('ante_structure'),
-            "level_time_minutes": t.get('level_time_minutes'),
-            "notes": t.get('notes', ''),
-            "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
-            "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
-        }
-        tournament_json_data.append(clean_tournament)
+    # Sort venues by frequency and get top 5
+    top_venues = sorted(venue_performance.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
     
-    return f"""
-USER TOURNAMENT PERFORMANCE DATA FOR ANALYSIS:
+    # Recent performance trend (last 10 tournaments)
+    recent_tournaments = user_tournaments[:10]
+    recent_profit = sum(t.get('prize_won', 0) - t.get('total_investment', 0) for t in recent_tournaments)
+    recent_investment = sum(t.get('total_investment', 0) for t in recent_tournaments)
+    recent_roi = (recent_profit / recent_investment * 100) if recent_investment > 0 else 0
+    
+    return f"""USER TOURNAMENT PERFORMANCE ANALYSIS:
 
-Overall Performance Summary:
+OVERALL PERFORMANCE:
 - Total Tournaments: {overall_stats['total_tournaments']}
 - Overall ROI: {overall_stats['overall_roi']:.1f}%
 - ITM Rate: {overall_stats['itm_rate']:.1f}%
 - Total Profit/Loss: ${overall_stats['total_profit']:.0f}
 - Total Investment: ${overall_stats['total_investment']:.0f}
 
-Format Performance:
-- Live Tournaments: {format_stats['live']['total_tournaments']} played, ROI: {format_stats['live']['overall_roi']:.1f}%
-- Online Tournaments: {format_stats['online']['total_tournaments']} played, ROI: {format_stats['online']['overall_roi']:.1f}%
+FORMAT PERFORMANCE:
+- Live: {format_stats['live']['total_tournaments']} tournaments, {format_stats['live']['overall_roi']:.1f}% ROI
+- Online: {format_stats['online']['total_tournaments']} tournaments, {format_stats['online']['overall_roi']:.1f}% ROI
 
-Buy-in Distribution:
+BUY-IN PERFORMANCE:
 - Low Stakes ($1-$100): {len(low_buyin)} tournaments
 - Mid Stakes ($101-$500): {len(mid_buyin)} tournaments  
 - High Stakes ($500+): {len(high_buyin)} tournaments
 
-TOURNAMENT DATA (JSON FORMAT - Last 10 Tournaments):
-{json.dumps(tournament_json_data, indent=2)}
+TOP VENUES (by frequency):
+{chr(10).join([f"- {venue}: {data['count']} tournaments, {(data['total_profit']/data['total_investment']*100 if data['total_investment'] > 0 else 0):.1f}% ROI" for venue, data in top_venues])}
 
-INSTRUCTIONS: Analyze this tournament data to identify patterns and provide specific recommendations for optimal tournament selection and ROI maximization. Focus on format preferences, buy-in optimization, venue performance, and strategic adjustments based on the actual results shown above."""
+RECENT TREND (Last 10 tournaments):
+- Recent ROI: {recent_roi:.1f}%
+- Recent Profit/Loss: ${recent_profit:.0f}
+
+ANALYSIS INSTRUCTIONS:
+Use this performance data to provide personalized recommendations. Focus on:
+1. Format preferences (Live vs Online performance)
+2. Optimal buy-in ranges based on historical ROI
+3. Venue-specific performance patterns
+4. Recent performance trends
+5. Risk assessment based on bankroll and variance
+
+Provide specific, actionable advice based on the user's actual results."""
 
 
 def process_chat_message(client, messages, username, coaching_mode):
