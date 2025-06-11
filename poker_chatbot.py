@@ -1211,48 +1211,196 @@ INSTRUCTIONS: Analyze this tournament data in context of the specific tournament
 
                 # Input section with text and voice options
                 try:
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.text_input(
-                            "Type or use voice input →",
-                            key="user_message",
-                            on_change=process_message
-                        )
-
-                    with col2:
-                        st.markdown("""
-                            <style>
-                            div[data-testid="stHorizontalBlock"] > div:nth-child(2) {
-                                display: flex;
-                                justify-content: center;
-                                align-items: center;
-                            }
-                            </style>
-                        """, unsafe_allow_html=True)
-                        
+                    # Text input on top
+                    st.text_input(
+                        "Type your message below or use voice input:",
+                        key="user_message",
+                        on_change=process_message
+                    )
+                    
+                    # Voice input button below, centered
+                    col_left, col_center, col_right = st.columns([1, 1, 1])
+                    with col_center:
                         # Simple audio recording implementation
                         audio = mic_recorder(
-                            start_prompt="🎤 Click to Start",
-                            stop_prompt="⏹️ Click to Stop",
+                            start_prompt="🎤 Click to Chat",
+                            stop_prompt="⏹️",
                             key="recorder"
                         )
 
-                        if audio and isinstance(audio, dict) and 'bytes' in audio:
-                            with st.spinner("Transcribing..."):
-                                try:
-                                    # Create audio file object for Whisper
-                                    audio_file = io.BytesIO(audio['bytes'])
-                                    audio_file.name = "audio.webm"
+                    if audio and isinstance(audio, dict) and 'bytes' in audio:
+                        with st.spinner("Transcribing..."):
+                            try:
+                                # Create audio file object for Whisper
+                                audio_file = io.BytesIO(audio['bytes'])
+                                audio_file.name = "audio.webm"
+                                
+                                # Transcribe with Whisper
+                                transcript = st.session_state.openai_client.audio.transcriptions.create(
+                                    model="whisper-1",
+                                    file=audio_file
+                                )
+                                
+                                # Process the voice input directly
+                                if transcript.text and transcript.text != st.session_state.last_processed_input:
+                                    user_input = transcript.text
+                                    st.session_state.last_processed_input = user_input
                                     
-                                    # Transcribe with Whisper
-                                    transcript = st.session_state.openai_client.audio.transcriptions.create(
-                                        model="whisper-1",
-                                        file=audio_file
+                                    # Initialize chat if empty
+                                    if len(st.session_state.chat) == 0:
+                                        # Get user's tournament history for context
+                                        user_tournaments = get_user_tournament_results(st.session_state["username"])
+                                        tournament_context = ""
+                                        
+                                        if user_tournaments:
+                                            # For Tournament Strategy Analysis mode, provide comprehensive data
+                                            if st.session_state.coaching_mode == "Personalized Tournament Strategy Analysis":
+                                                # Comprehensive tournament analysis for strategy mode
+                                                total_tournaments = len(user_tournaments)
+                                                total_profit = sum(t['prize_won'] - t['total_investment'] for t in user_tournaments)
+                                                total_investment = sum(t['total_investment'] for t in user_tournaments)
+                                                overall_roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
+                                                itm_count = sum(1 for t in user_tournaments if t['prize_won'] > 0)
+                                                itm_rate = (itm_count / total_tournaments * 100) if total_tournaments > 0 else 0
+                                                
+                                                # Performance by format
+                                                live_tournaments = [t for t in user_tournaments if t.get('format') == 'Live']
+                                                online_tournaments = [t for t in user_tournaments if t.get('format') == 'Online']
+                                                
+                                                live_roi = 0
+                                                online_roi = 0
+                                                if live_tournaments:
+                                                    live_profit = sum(t['prize_won'] - t['total_investment'] for t in live_tournaments)
+                                                    live_investment = sum(t['total_investment'] for t in live_tournaments)
+                                                    live_roi = (live_profit / live_investment * 100) if live_investment > 0 else 0
+                                                
+                                                if online_tournaments:
+                                                    online_profit = sum(t['prize_won'] - t['total_investment'] for t in online_tournaments)
+                                                    online_investment = sum(t['total_investment'] for t in online_tournaments)
+                                                    online_roi = (online_profit / online_investment * 100) if online_investment > 0 else 0
+                                                
+                                                # Performance by buy-in ranges
+                                                low_buyin = [t for t in user_tournaments if t['buy_in'] <= 100]
+                                                mid_buyin = [t for t in user_tournaments if 100 < t['buy_in'] <= 500]
+                                                high_buyin = [t for t in user_tournaments if t['buy_in'] > 500]
+                                                
+                                                # Get last 10 tournaments and convert to clean JSON for analysis
+                                                import json
+                                                last_10_tournaments = user_tournaments[:10]
+                                                tournament_json_data = []
+                                                
+                                                for t in last_10_tournaments:
+                                                    # Clean tournament data for JSON - remove MongoDB ObjectId and add calculated fields
+                                                    clean_tournament = {
+                                                        "tournament_date": t.get('tournament_date'),
+                                                        "venue": t.get('venue'),
+                                                        "format": t.get('format'),
+                                                        "buy_in": t.get('buy_in'),
+                                                        "rebuys": t.get('rebuys', 0),
+                                                        "add_ons": t.get('add_ons', 0),
+                                                        "total_investment": t.get('total_investment'),
+                                                        "total_entries": t.get('total_entries'),
+                                                        "position_finished": t.get('position_finished'),
+                                                        "prize_won": t.get('prize_won'),
+                                                        "duration_hours": t.get('duration_hours', 0),
+                                                        "starting_stack": t.get('starting_stack'),
+                                                        "ante_structure": t.get('ante_structure'),
+                                                        "level_time_minutes": t.get('level_time_minutes'),
+                                                        "notes": t.get('notes', ''),
+                                                        "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
+                                                        "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
+                                                    }
+                                                    tournament_json_data.append(clean_tournament)
+                                                
+                                                tournament_context = f"""
+USER TOURNAMENT PERFORMANCE DATA FOR ANALYSIS:
+
+Overall Performance Summary:
+- Total Tournaments: {total_tournaments}
+- Overall ROI: {overall_roi:.1f}%
+- ITM Rate: {itm_rate:.1f}%
+- Total Profit/Loss: ${total_profit:,.0f}
+- Total Investment: ${total_investment:,.0f}
+
+Format Performance:
+- Live Tournaments: {len(live_tournaments)} played, ROI: {live_roi:.1f}%
+- Online Tournaments: {len(online_tournaments)} played, ROI: {online_roi:.1f}%
+
+Buy-in Distribution:
+- Low Stakes ($1-$100): {len(low_buyin)} tournaments
+- Mid Stakes ($101-$500): {len(mid_buyin)} tournaments  
+- High Stakes ($500+): {len(high_buyin)} tournaments
+
+TOURNAMENT DATA (JSON FORMAT - Last 10 Tournaments):
+{json.dumps(tournament_json_data, indent=2)}
+
+INSTRUCTIONS: Analyze this tournament data to identify patterns and provide specific recommendations for optimal tournament selection and ROI maximization. Focus on format preferences, buy-in optimization, venue performance, and strategic adjustments based on the actual results shown above."""
+                                            
+                                            else:
+                                                # Basic context for other modes
+                                                total_tournaments = len(user_tournaments)
+                                                recent_results = user_tournaments[:3]  # Last 3 tournaments
+                                                tournament_context = f"Context: The user has played {total_tournaments} tracked tournaments. "
+                                                tournament_context += "Recent results: " + ", ".join([
+                                                    f"${t['prize_won']} won (${t['total_investment']} invested)" for t in recent_results
+                                                ])
+                                        
+                                        # Get relevant chat history
+                                        past_chats = get_user_chats(st.session_state["username"])
+                                        chat_context = ""
+                                        if past_chats:
+                                            # Filter chats by current mode
+                                            mode_chats = [chat for chat in past_chats if chat['mode'] == st.session_state.coaching_mode]
+                                            if mode_chats:
+                                                # Get the last 3 relevant conversations
+                                                recent_chats = mode_chats[:3]
+                                                chat_context = "\n\nPrevious relevant conversations:\n"
+                                                for chat in recent_chats:
+                                                    # Extract key exchanges from each chat
+                                                    messages = chat['messages']
+                                                    # Skip system message and get user-assistant pairs
+                                                    for i in range(1, len(messages)-1, 2):
+                                                        chat_context += f"User: {messages[i]['content']}\n"
+                                                        chat_context += f"Coach: {messages[i+1]['content']}\n"
+                                        
+                                        system_prompt = GENERAL_COACHING_PROMPT if st.session_state.coaching_mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
+                                        
+                                        # Add context to system prompt
+                                        if tournament_context:
+                                            system_prompt += f"\n\n{tournament_context}"
+                                        if chat_context:
+                                            system_prompt += f"\n{chat_context}\n\nUse the above conversation history to maintain consistency in your advice and build upon previous discussions. If you see patterns in the user's questions or areas they frequently ask about, address those topics more thoroughly."
+                                        
+                                        st.session_state.chat = [{
+                                            "role": "system",
+                                            "content": system_prompt
+                                        }]
+                                    
+                                    # Add user message and get response
+                                    st.session_state.chat.append({"role": "user", "content": user_input})
+                                    
+                                    # Call OpenAI
+                                    response = client.chat.completions.create(
+                                        model="o3-mini",
+                                        reasoning_effort="medium",
+                                        messages=st.session_state.chat
                                     )
-                                    st.session_state.user_message = transcript.text
-                                    process_message()
-                                except Exception as e:
-                                    st.error(f"Error transcribing audio: {str(e)}")
+                                    
+                                    reply = response.choices[0].message.content
+                                    st.session_state.chat.append({"role": "assistant", "content": reply})
+                                    
+                                    # Save chat to database
+                                    save_chat(
+                                        st.session_state["username"],
+                                        st.session_state.coaching_mode,
+                                        st.session_state.chat
+                                    )
+                                    
+                                    # Clear the text input by triggering a rerun
+                                    st.rerun()
+                                    
+                            except Exception as e:
+                                st.error(f"Error transcribing audio: {str(e)}")
                 except Exception as e:
                     st.error(f"Error in chat interface: {str(e)}")
 
