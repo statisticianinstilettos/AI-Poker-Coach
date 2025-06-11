@@ -7,7 +7,7 @@ import io
 from openai import OpenAI
 import yaml
 import streamlit_authenticator as stauth
-from database import save_chat, get_user_chats, save_tournament_result, get_user_tournament_results, get_user_stats, get_user_by_username
+from database import save_chat, get_user_chats, save_tournament_result, get_user_tournament_results, get_user_stats, get_user_by_username, delete_user_tournament_results
 
 # Use API keys from secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -257,7 +257,7 @@ try:
         try:
             mode = st.radio(
                 "Select Coaching Mode:",
-                ["General Coaching Chat", "Tournament Strategy", "Enter Tournament Result"],
+                ["General Coaching Chat", "Tournament Strategy", "Enter Tournament Result", "View Tournament Results"],
                 key="coaching_mode",
                 on_change=on_mode_change
             )
@@ -306,6 +306,110 @@ try:
                                     st.error(f"Error saving tournament result: {str(e)}")
                     except Exception as e:
                         st.error(f"Error displaying tournament form: {str(e)}")
+            
+            elif mode == "View Tournament Results":
+                st.subheader("📊 Your Tournament Results")
+                
+                try:
+                    # Get tournament results from database
+                    tournament_results = get_user_tournament_results(st.session_state["username"])
+                    
+                    if tournament_results:
+                        # Convert to pandas DataFrame for better display
+                        import pandas as pd
+                        
+                        # Prepare data for table
+                        table_data = []
+                        for result in tournament_results:
+                            profit_loss = result['prize_won'] - result['total_investment']
+                            roi = (profit_loss / result['total_investment'] * 100) if result['total_investment'] > 0 else 0
+                            
+                            table_data.append({
+                                'Date': result['tournament_date'],
+                                'Venue': result['venue'],
+                                'Format': result['format'],
+                                'Buy-in': f"${result['buy_in']:.0f}",
+                                'Investment': f"${result['total_investment']:.0f}",
+                                'Position': f"{result['position_finished']}/{result['total_entries']}",
+                                'Prize': f"${result['prize_won']:.0f}",
+                                'P/L': f"${profit_loss:.0f}",
+                                'ROI': f"{roi:.1f}%",
+                                'Duration': f"{result.get('duration_hours', 0):.1f}h"
+                            })
+                        
+                        df = pd.DataFrame(table_data)
+                        
+                        # Display summary stats
+                        col1, col2, col3, col4 = st.columns(4)
+                        total_tournaments = len(tournament_results)
+                        total_profit = sum(r['prize_won'] - r['total_investment'] for r in tournament_results)
+                        total_investment = sum(r['total_investment'] for r in tournament_results)
+                        itm_count = sum(1 for r in tournament_results if r['prize_won'] > 0)
+                        
+                        with col1:
+                            st.metric("Total Tournaments", total_tournaments)
+                        with col2:
+                            st.metric("Total P/L", f"${total_profit:,.0f}")
+                        with col3:
+                            roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
+                            st.metric("Overall ROI", f"{roi:.1f}%")
+                        with col4:
+                            itm_percentage = (itm_count / total_tournaments * 100) if total_tournaments > 0 else 0
+                            st.metric("ITM Rate", f"{itm_percentage:.1f}%")
+                        
+                        st.divider()
+                        
+                        # Display the table
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Add download option
+                        csv = df.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Download Results as CSV",
+                            data=csv,
+                            file_name=f"tournament_results_{st.session_state['username']}.csv",
+                            mime="text/csv"
+                        )
+                        
+                        # Add clear data option
+                        st.divider()
+                        st.subheader("🗑️ Data Management")
+                        
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            if st.button("🗑️ Clear All Data", type="secondary"):
+                                st.session_state.show_clear_confirm = True
+                        
+                        with col2:
+                            if st.session_state.get('show_clear_confirm', False):
+                                st.warning("⚠️ This will permanently delete ALL your tournament results!")
+                                col_yes, col_no = st.columns(2)
+                                with col_yes:
+                                    if st.button("✅ Yes, Delete All", type="primary"):
+                                        try:
+                                            deleted_count = delete_user_tournament_results(st.session_state["username"])
+                                            st.success(f"✅ Successfully deleted {deleted_count} tournament records!")
+                                            st.session_state.show_clear_confirm = False
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error deleting data: {str(e)}")
+                                with col_no:
+                                    if st.button("❌ Cancel"):
+                                        st.session_state.show_clear_confirm = False
+                                        st.rerun()
+                        
+                    else:
+                        st.info("📝 No tournament results found. Start by entering your tournament results!")
+                        st.markdown("Use the **'Enter Tournament Result'** mode to add your first tournament.")
+                        
+                except Exception as e:
+                    st.error(f"Error loading tournament results: {str(e)}")
+                    st.info("💡 If you're seeing this error, the database connection might not be working. Tournament results will be available once the database is connected.")
+
             else:
                 # Display mode-specific instructions
                 if mode == "Tournament Strategy":

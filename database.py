@@ -92,4 +92,11 @@ def get_user_stats(username):
         stats["roi"] = (stats["total_profit"] / stats["total_investment"] * 100) if stats["total_investment"] > 0 else 0
         stats["itm_percentage"] = (stats["itm_finishes"] / stats["total_tournaments"] * 100) if stats["total_tournaments"] > 0 else 0
         return stats
-    return None 
+    return None
+
+def delete_user_tournament_results(username):
+    """Delete all tournament results for a specific user"""
+    db = get_db()
+    tournaments = db.tournaments
+    result = tournaments.delete_many({"username": username})
+    return result.deleted_count 
