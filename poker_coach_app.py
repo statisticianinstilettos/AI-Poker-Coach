@@ -167,18 +167,14 @@ def main():
         [
             "General Coaching Chat", 
             "Personalized Tournament Strategy Analysis", 
-            "Enter Tournament Result", 
-            "View Tournament Results"
+            "Tournament Results"
         ],
         key="coaching_mode",
         on_change=handle_mode_change
     )
     
     # Handle different modes
-    if mode == "Enter Tournament Result":
-        create_tournament_entry_form()
-    
-    elif mode == "View Tournament Results":
+    if mode == "Tournament Results":
         # Check for edit mode
         if 'edit_tournament_id' in st.session_state:
             tournament_id = st.session_state.edit_tournament_id

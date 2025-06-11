@@ -6,6 +6,7 @@ Handles tournament results viewing, editing, and deletion.
 import streamlit as st
 import pandas as pd
 from src.utils.calculations import calculate_profit_loss, calculate_roi
+from src.forms.tournament_forms import create_tournament_entry_form
 from database import (
     get_user_tournament_results, delete_single_tournament_result, 
     delete_user_tournament_results
@@ -14,12 +15,38 @@ from database import (
 
 def display_tournament_results(username):
     """
-    Display tournament results table with edit/delete functionality.
+    Display tournament results table with edit/delete functionality and add new option.
     
     Args:
         username (str): Current username
     """
     st.subheader("📊 Your Tournament Results")
+    
+    # Add New Tournament button
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        if st.button("➕ Add New Tournament", type="primary"):
+            st.session_state.show_add_form = True
+    
+    # Show add tournament form if requested
+    if st.session_state.get('show_add_form', False):
+        st.divider()
+        st.subheader("➕ Add New Tournament Result")
+        
+        # Create the form and check if it was submitted successfully
+        form_submitted = create_tournament_entry_form()
+        
+        if form_submitted:
+            # Clear the form state and rerun to show updated results
+            st.session_state.show_add_form = False
+            st.rerun()
+        
+        # Cancel button
+        if st.button("❌ Cancel", key="cancel_add_form"):
+            st.session_state.show_add_form = False
+            st.rerun()
+        
+        st.divider()
     
     try:
         tournament_results = get_user_tournament_results(username)
@@ -142,8 +169,7 @@ def display_tournament_results(username):
                             st.session_state.show_clear_confirm = False
                             st.rerun()
         else:
-            st.info("📝 No tournament results found. Start by entering your tournament results!")
-            st.markdown("Use the **'Enter Tournament Result'** mode to add your first tournament.")
+            st.info("📝 No tournament results found. Click 'Add New Tournament' above to add your first tournament.")
             
     except Exception as e:
         st.error(f"Error loading tournament results: {str(e)}")
