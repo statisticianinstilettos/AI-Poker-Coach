@@ -1,5 +1,6 @@
 import numpy as np
 from tournament import tournament_structure
+from player import player_distribution, player_pdf
 
 def player_distribution(num_players, distribution_type="uniform"):
     """
@@ -22,7 +23,7 @@ def player_distribution(num_players, distribution_type="uniform"):
     
     return probabilities
 
-def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=None, rake_percent=0.1, paid_percent=0.15):
+def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=None, rake_percent=0.1, paid_percent=0.15, tournament_history=None, format_filter=None, buyin_range=None):
     """
     Calculate tournament Expected Value using formula:
     EV = sum[p(x)s(x)] - c(1 + r)
@@ -37,15 +38,30 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
         buy_in (float): Tournament buy-in amount (c)
         num_rebuys (int): Expected number of rebuys (r)
         p_distribution (numpy.ndarray, optional): Custom probability distribution.
-            If None, uses uniform distribution
+            If None, uses uniform distribution or creates personalized if tournament_history provided
         rake_percent (float): Percentage of rake taken from buy-in
         paid_percent (float): Percentage of players who get paid
+        tournament_history (list, optional): Historical tournament data for personalized distribution
+        format_filter (str, optional): Filter historical data by format
+        buyin_range (tuple, optional): Filter historical data by buy-in range
     
     Returns:
         float: Expected value of playing in the tournament
+        dict: Additional metadata if personalized distribution is used
     """
+    metadata = None
+    
     # Get probability distribution
-    if p_distribution is None:
+    if p_distribution is not None:
+        # Use provided distribution
+        pass
+    elif tournament_history:
+        # Create personalized distribution from historical data
+        p_distribution, metadata = player_pdf(
+            tournament_history, num_players, format_filter, buyin_range
+        )
+    else:
+        # Use uniform distribution as fallback
         p_distribution = player_distribution(num_players)
     
     # Get payout structure
@@ -59,7 +75,10 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
     total_cost = buy_in * (1 + num_rebuys)  # c(1 + r)
     ev = sum(p * s for p, s in zip(p_distribution, s_values)) - total_cost
     
-    return ev
+    if metadata:
+        return ev, metadata
+    else:
+        return ev
 
 # Example usage
 if __name__ == "__main__":

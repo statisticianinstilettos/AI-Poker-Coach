@@ -8,6 +8,9 @@ from openai import OpenAI
 import yaml
 import streamlit_authenticator as stauth
 from database import save_chat, get_user_chats, save_tournament_result, get_user_tournament_results, get_user_stats, get_user_by_username, delete_user_tournament_results
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Use API keys from secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -26,6 +29,74 @@ openai_client = track_openai(client) #set up the Opik tracer
 # Initialize OpenAI client for Whisper
 if 'openai_client' not in st.session_state:
     st.session_state.openai_client = OpenAI()
+
+def create_player_pdf_plot(tournament_results, username):
+    """
+    Create a matplotlib plot of the user's personalized probability distribution
+    """
+    if not tournament_results or len(tournament_results) < 3:
+        return None, None
+    
+    try:
+        # Import the player_pdf function
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'player_model'))
+        from player import player_pdf
+        
+        # Use a standard field size for visualization (100 players)
+        field_size = 100
+        
+        # Get personalized distribution
+        probabilities, metadata = player_pdf(tournament_results, field_size)
+        
+        # Create the plot
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(6, 4))
+        
+        # Create positions as percentiles for better readability
+        positions = np.arange(1, field_size + 1)
+        percentiles = positions / field_size * 100
+        
+        # Plot the distribution
+        ax.plot(percentiles, probabilities * 100, color='#FFA500', linewidth=2, alpha=0.8)
+        ax.fill_between(percentiles, probabilities * 100, alpha=0.3, color='#FFA500')
+        
+        # Customize the plot
+        ax.set_xlabel('Finish Percentile (%)', color='white', fontsize=10)
+        ax.set_ylabel('Probability (%)', color='white', fontsize=10)
+        ax.set_title(f'{username}\'s Performance Distribution\n({metadata["sample_size"]} tournaments)', 
+                    color='#FFA500', fontsize=12, fontweight='bold')
+        
+        # Add grid
+        ax.grid(True, alpha=0.3, color='white')
+        
+        # Set background color
+        fig.patch.set_facecolor('#0E1117')
+        ax.set_facecolor('#0E1117')
+        
+        # Color the axes
+        ax.tick_params(colors='white', labelsize=8)
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        # Add expected finish line
+        expected_percentile = metadata['expected_finish_position'] / field_size * 100
+        ax.axvline(expected_percentile, color='#87CEEB', linestyle='--', alpha=0.8, linewidth=1)
+        ax.text(expected_percentile + 2, max(probabilities * 100) * 0.8, 
+               f'Expected: {expected_percentile:.0f}%', 
+               color='#87CEEB', fontsize=8, rotation=90)
+        
+        # Tight layout
+        plt.tight_layout()
+        
+        return fig, metadata
+        
+    except Exception as e:
+        st.error(f"Error creating PDF plot: {str(e)}")
+        return None, None
 
 # Page configuration
 st.set_page_config(page_title="♠️ Poker Coach GPT", page_icon="♠️", layout="centered")
@@ -72,6 +143,18 @@ try:
             st.sidebar.metric("ROI", f"{user_stats['roi']:.1f}%")
             st.sidebar.metric("ITM %", f"{user_stats['itm_percentage']:.1f}%")
             st.sidebar.metric("Total Profit", f"${user_stats['total_profit']:,.2f}")
+            
+            # Create and display player PDF plot
+            user_tournament_data = get_user_tournament_results(st.session_state["username"])
+            if user_tournament_data and len(user_tournament_data) >= 3:
+                fig, metadata = create_player_pdf_plot(user_tournament_data, st.session_state["username"])
+                if fig and metadata:
+                    st.sidebar.subheader("📊 Your Performance Distribution")
+                    st.sidebar.pyplot(fig, use_container_width=True)
+                    plt.close(fig)  # Clean up to prevent memory issues
+                    
+                    # Add small explanation
+                    st.sidebar.caption(f"Based on {metadata['sample_size']} tournaments • {metadata['confidence_level'].title()} confidence")
     elif st.session_state['authentication_status'] == False:
         st.error('Username/password is incorrect')
     elif st.session_state['authentication_status'] == None:
@@ -143,13 +226,96 @@ try:
                     # Get user's tournament history for context
                     user_tournaments = get_user_tournament_results(st.session_state["username"])
                     tournament_context = ""
+                    
                     if user_tournaments:
-                        total_tournaments = len(user_tournaments)
-                        recent_results = user_tournaments[:3]  # Last 3 tournaments
-                        tournament_context = f"Context: The user has played {total_tournaments} tracked tournaments. "
-                        tournament_context += "Recent results: " + ", ".join([
-                            f"${t['prize_won']} won (${t['total_investment']} invested)" for t in recent_results
-                        ])
+                        # For Tournament Strategy Analysis mode, provide comprehensive data
+                        if st.session_state.coaching_mode == "Personalized Tournament Strategy Analysis":
+                            # Comprehensive tournament analysis for strategy mode
+                            total_tournaments = len(user_tournaments)
+                            total_profit = sum(t['prize_won'] - t['total_investment'] for t in user_tournaments)
+                            total_investment = sum(t['total_investment'] for t in user_tournaments)
+                            overall_roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
+                            itm_count = sum(1 for t in user_tournaments if t['prize_won'] > 0)
+                            itm_rate = (itm_count / total_tournaments * 100) if total_tournaments > 0 else 0
+                            
+                            # Performance by format
+                            live_tournaments = [t for t in user_tournaments if t.get('format') == 'Live']
+                            online_tournaments = [t for t in user_tournaments if t.get('format') == 'Online']
+                            
+                            live_roi = 0
+                            online_roi = 0
+                            if live_tournaments:
+                                live_profit = sum(t['prize_won'] - t['total_investment'] for t in live_tournaments)
+                                live_investment = sum(t['total_investment'] for t in live_tournaments)
+                                live_roi = (live_profit / live_investment * 100) if live_investment > 0 else 0
+                            
+                            if online_tournaments:
+                                online_profit = sum(t['prize_won'] - t['total_investment'] for t in online_tournaments)
+                                online_investment = sum(t['total_investment'] for t in online_tournaments)
+                                online_roi = (online_profit / online_investment * 100) if online_investment > 0 else 0
+                            
+                            # Performance by buy-in ranges
+                            low_buyin = [t for t in user_tournaments if t['buy_in'] <= 100]
+                            mid_buyin = [t for t in user_tournaments if 100 < t['buy_in'] <= 500]
+                            high_buyin = [t for t in user_tournaments if t['buy_in'] > 500]
+                            
+                            # Get last 10 tournaments and convert to clean JSON for analysis
+                            import json
+                            last_10_tournaments = user_tournaments[:10]
+                            tournament_json_data = []
+                            
+                            for t in last_10_tournaments:
+                                # Clean tournament data for JSON - remove MongoDB ObjectId and add calculated fields
+                                clean_tournament = {
+                                    "tournament_date": t.get('tournament_date'),
+                                    "venue": t.get('venue'),
+                                    "format": t.get('format'),
+                                    "buy_in": t.get('buy_in'),
+                                    "rebuys": t.get('rebuys', 0),
+                                    "add_ons": t.get('add_ons', 0),
+                                    "total_investment": t.get('total_investment'),
+                                    "total_entries": t.get('total_entries'),
+                                    "position_finished": t.get('position_finished'),
+                                    "prize_won": t.get('prize_won'),
+                                    "duration_hours": t.get('duration_hours', 0),
+                                    "notes": t.get('notes', ''),
+                                    "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
+                                    "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
+                                }
+                                tournament_json_data.append(clean_tournament)
+                            
+                            tournament_context = f"""
+USER TOURNAMENT PERFORMANCE DATA FOR ANALYSIS:
+
+Overall Performance Summary:
+- Total Tournaments: {total_tournaments}
+- Overall ROI: {overall_roi:.1f}%
+- ITM Rate: {itm_rate:.1f}%
+- Total Profit/Loss: ${total_profit:,.0f}
+- Total Investment: ${total_investment:,.0f}
+
+Format Performance:
+- Live Tournaments: {len(live_tournaments)} played, ROI: {live_roi:.1f}%
+- Online Tournaments: {len(online_tournaments)} played, ROI: {online_roi:.1f}%
+
+Buy-in Distribution:
+- Low Stakes ($1-$100): {len(low_buyin)} tournaments
+- Mid Stakes ($101-$500): {len(mid_buyin)} tournaments  
+- High Stakes ($500+): {len(high_buyin)} tournaments
+
+TOURNAMENT DATA (JSON FORMAT - Last 10 Tournaments):
+{json.dumps(tournament_json_data, indent=2)}
+
+INSTRUCTIONS: Analyze this tournament data to identify patterns and provide specific recommendations for optimal tournament selection and ROI maximization. Focus on format preferences, buy-in optimization, venue performance, and strategic adjustments based on the actual results shown above."""
+                        
+                        else:
+                            # Basic context for other modes
+                            total_tournaments = len(user_tournaments)
+                            recent_results = user_tournaments[:3]  # Last 3 tournaments
+                            tournament_context = f"Context: The user has played {total_tournaments} tracked tournaments. "
+                            tournament_context += "Recent results: " + ", ".join([
+                                f"${t['prize_won']} won (${t['total_investment']} invested)" for t in recent_results
+                            ])
                     
                     # Get relevant chat history
                     past_chats = get_user_chats(st.session_state["username"])
@@ -225,39 +391,53 @@ try:
 
         If you don't know something precisely, approximate it. Always reason it out — use simple formulas and poker logic. Avoid rambling. Just teach, coach, and get the user better — one solid hand at a time."""
 
-        TOURNAMENT_STRATEGY_PROMPT = """You are an expert Tournament Poker Coach GPT, specializing in crafting personalized tournament strategies. Your expertise covers all aspects of tournament play, from early stage to final table dynamics.
+        TOURNAMENT_STRATEGY_PROMPT = """You are an expert Tournament Selection & ROI Optimization Coach GPT. Your specialty is analyzing a player's historical tournament performance to provide data-driven recommendations for specific tournaments they're considering.
 
-        Initial Assessment:
-            •   Ask about their typical buy-in range and tournament types (live/online)
-            •   Inquire about their current ROI and in-the-money percentage
-            •   Understand their playing style and perceived strengths/weaknesses
+        Your Primary Function:
+            •   First, ask the user for details about the specific tournament they're considering playing
+            •   Analyze their historical data in context of this specific tournament opportunity
+            •   Provide tailored recommendations for that exact tournament based on their past performance patterns
+            •   Give specific strategic advice for maximizing ROI in that particular tournament
 
-        Strategy Customization:
-            •   Provide stack-size specific advice (big stack, medium, short stack play)
-            •   Adjust strategies for different tournament stages
-            •   ICM-aware recommendations for crucial decisions
-            •   Bubble play and final table adjustments
-            •   Specific advice for their preferred tournament types
+        Step 1 - Gather Tournament Details:
+        Ask the user to provide details about the tournament they're considering:
+            •   Venue/Location (casino name, online site, etc.)
+            •   Buy-in amount and structure (rebuys, add-ons allowed?)
+            •   Format (Live or Online)
+            •   Expected field size or typical field size
+            •   Tournament structure (deep stack, turbo, etc.)
+            •   Any other relevant details about the event
 
-        Mathematical Approach:
-            •   Calculate ICM implications for key decisions
-            •   Provide clear push/fold ranges based on stack sizes
-            •   Explain risk/reward ratios for tournament-specific spots
-            •   Break down prize pool structures and their strategic implications
+        Step 2 - Data Analysis & Recommendations:
+        Based on their tournament history data, analyze:
+            •   Their performance at similar venues
+            •   ROI trends at similar buy-in levels
+            •   Success rates in similar formats (Live vs Online)
+            •   Performance in similar field sizes
+            •   Optimal strategy adjustments for this specific tournament type
 
-        Your responses should be:
-            •   Highly personalized to their specific tournament type and level
-            •   Mathematical when needed, but always practical
-            •   Focused on maximizing ROI and reducing variance
-            •   Clear about adjustments needed as tournaments progress
+        Step 3 - Specific Recommendations:
+        Provide actionable advice:
+            •   Whether they should play this tournament (yes/no with reasoning)
+            •   Expected ROI range based on their historical performance
+            •   Optimal strategy approach for this specific tournament
+            •   Bankroll considerations and risk assessment
+            •   Specific adjustments to make based on venue/format/field size
 
-        Start by gathering key information about their tournament experience and goals, then provide targeted, actionable advice."""
+        Your Approach:
+            •   Start every conversation by asking for the specific tournament details
+            •   Reference their actual performance data when making recommendations
+            •   Compare this tournament to similar ones in their history
+            •   Provide confidence levels for your recommendations based on sample size
+            •   Give specific, actionable advice rather than generic tournament strategy
+
+        Remember: You have access to their complete tournament history in JSON format. Use this data to provide personalized, evidence-based recommendations for the specific tournament they're asking about. Always tie your advice back to their actual results in similar situations."""
 
         # Mode selection
         try:
             mode = st.radio(
                 "Select Coaching Mode:",
-                ["General Coaching Chat", "Tournament Strategy", "Enter Tournament Result", "View Tournament Results"],
+                ["General Coaching Chat", "Personalized Tournament Strategy Analysis", "Enter Tournament Result", "View Tournament Results"],
                 key="coaching_mode",
                 on_change=on_mode_change
             )
@@ -410,10 +590,401 @@ try:
                     st.error(f"Error loading tournament results: {str(e)}")
                     st.info("💡 If you're seeing this error, the database connection might not be working. Tournament results will be available once the database is connected.")
 
+            elif mode == "Personalized Tournament Strategy Analysis":
+                st.subheader("🎯 Tournament Strategy Analysis")
+                st.info("Fill out the details of the tournament you're considering, and I'll analyze your historical data to provide personalized recommendations.")
+                
+                with st.form("tournament_analysis"):
+                    st.subheader("Tournament Details")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        venue = st.text_input("Venue/Location*", placeholder="e.g., Bellagio, PokerStars, Borgata")
+                        buy_in = st.number_input("Buy-in Amount ($)*", min_value=0.0, step=1.0, value=100.0)
+                        format_type = st.selectbox("Format*", ["Live", "Online"])
+                        field_size = st.number_input("Expected Field Size*", min_value=1, step=1, value=100, help="Expected number of players")
+                        
+                        # EV Calculation Parameters
+                        st.subheader("Tournament Structure & EV Analysis")
+                        rake_percent = st.number_input("Rake Percentage (%)", min_value=0.0, max_value=50.0, step=0.5, value=10.0, help="Tournament rake percentage (typically 10-15%)")
+                        paid_percent = st.number_input("Players Paid (%)", min_value=1.0, max_value=100.0, step=1.0, value=15.0, help="Percentage of field that gets paid (typically 10-20%)")
+                    
+                    with col2:
+                        structure = st.selectbox("Tournament Structure", 
+                                                ["MTT", "Single Table", "Deepstack", "Turbo", "Bounty", "Satellite", "Freezeout", "Other"])
+                        rebuys_allowed = st.selectbox("Rebuys Allowed?", ["No", "Yes - Limited", "Yes - Unlimited"])
+                        
+                        # Conditional rebuy details
+                        num_rebuys = 0
+                        if rebuys_allowed != "No":
+                            num_rebuys = st.number_input("Expected Number of Rebuys", min_value=0, step=1, value=1, help="How many rebuys do you typically use?")
+                        
+                        addon_available = st.selectbox("Add-on Available?", ["No", "Yes"])
+                        addon_cost = 0
+                        if addon_available == "Yes":
+                            addon_cost = st.number_input("Add-on Cost ($)", min_value=0.0, step=1.0, value=buy_in, help="Cost of the add-on (often same as buy-in)")
+                        
+                        other_details = st.text_area("Other Details", 
+                                                   placeholder="Any other relevant info: starting stack, blind levels, special format, etc.")
+                    
+                    st.markdown("*Required fields")
+                    
+                    submitted = st.form_submit_button("🎯 Get My Tournament Analysis & EV Calculation", type="primary")
+                    
+                    if submitted:
+                        if not venue or buy_in <= 0 or field_size <= 0:
+                            st.error("Please fill in the required fields: Venue, Buy-in Amount, and Field Size")
+                        else:
+                            # Import EV calculation function
+                            try:
+                                import sys
+                                import os
+                                sys.path.append(os.path.join(os.path.dirname(__file__), 'player_model'))
+                                from ev import calculate_tournament_ev
+                                from tournament import tournament_structure
+                                from player import player_pdf
+                                
+                                # Get user's tournament history for personalized distribution
+                                user_tournaments = get_user_tournament_results(st.session_state["username"])
+                                
+                                # Determine buy-in range for filtering (±50% of current buy-in)
+                                buyin_range = (buy_in * 0.5, buy_in * 2.0) if user_tournaments else None
+                                
+                                # Calculate EV with personalized distribution
+                                total_investment = buy_in * (1 + num_rebuys) + addon_cost
+                                
+                                if user_tournaments:
+                                    # Use personalized distribution
+                                    ev_result = calculate_tournament_ev(
+                                        num_players=int(field_size),
+                                        buy_in=buy_in,
+                                        num_rebuys=num_rebuys,
+                                        rake_percent=rake_percent/100,  # Convert percentage to decimal
+                                        paid_percent=paid_percent/100,   # Convert percentage to decimal
+                                        tournament_history=user_tournaments,
+                                        format_filter=format_type,
+                                        buyin_range=buyin_range
+                                    )
+                                    
+                                    # Handle return value (could be tuple with metadata or just float)
+                                    if isinstance(ev_result, tuple):
+                                        ev, personalized_metadata = ev_result
+                                        distribution_info = f"**🎯 Personalized Analysis:** Based on {personalized_metadata['sample_size']} similar tournaments (Confidence: {personalized_metadata['confidence_level'].title()})"
+                                        
+                                        # Get the personalized distribution for the table
+                                        personalized_distribution, _ = player_pdf(
+                                            user_tournaments, int(field_size), format_type, buyin_range
+                                        )
+                                    else:
+                                        ev = ev_result
+                                        personalized_metadata = None
+                                        distribution_info = "**📊 Standard Analysis:** Using uniform probability distribution"
+                                        personalized_distribution = None
+                                else:
+                                    # No tournament history, use uniform distribution
+                                    ev = calculate_tournament_ev(
+                                        num_players=int(field_size),
+                                        buy_in=buy_in,
+                                        num_rebuys=num_rebuys,
+                                        rake_percent=rake_percent/100,
+                                        paid_percent=paid_percent/100
+                                    )
+                                    personalized_metadata = None
+                                    distribution_info = "**📊 Standard Analysis:** No tournament history available, using uniform probability distribution"
+                                    personalized_distribution = None
+                                
+                                # Get payout structure
+                                payout_structure = tournament_structure(
+                                    int(field_size),
+                                    buy_in,
+                                    rake_percent=rake_percent/100,
+                                    paid_percent=paid_percent/100
+                                )
+                                
+                                # Display EV Analysis Results
+                                st.divider()
+                                st.subheader("📊 Mathematical EV Analysis")
+                                
+                                # Show distribution type being used
+                                st.info(distribution_info)
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric("Expected Value", f"${ev:.2f}")
+                                with col2:
+                                    roi_percent = (ev / total_investment * 100) if total_investment > 0 else 0
+                                    st.metric("Expected ROI", f"{roi_percent:.1f}%")
+                                with col3:
+                                    st.metric("Total Investment", f"${total_investment:.0f}")
+                                with col4:
+                                    breakeven_percent = (total_investment / (payout_structure['Payout ($)'].sum() / field_size)) * 100 if field_size > 0 else 0
+                                    st.metric("Break-even Rate", f"{breakeven_percent:.1f}%")
+                                
+                                # Show personalized performance insights if available
+                                if personalized_metadata and personalized_metadata['sample_size'] > 0:
+                                    with st.expander("🎯 Your Historical Performance Insights"):
+                                        col_a, col_b, col_c = st.columns(3)
+                                        with col_a:
+                                            expected_pos = personalized_metadata['expected_finish_position']
+                                            st.metric("Expected Finish Position", f"{expected_pos}/{field_size}")
+                                        with col_b:
+                                            avg_percentile = personalized_metadata['avg_finish_percentile'] * 100
+                                            st.metric("Average Finish Percentile", f"{avg_percentile:.1f}%")
+                                        with col_c:
+                                            best_percentile = personalized_metadata['best_finish_percentile'] * 100
+                                            st.metric("Best Finish Percentile", f"{best_percentile:.1f}%")
+                                        
+                                        st.markdown(f"""
+                                        **Analysis Method:** {personalized_metadata['method'].replace('_', ' ').title()}
+                                        
+                                        **Data Used:** {personalized_metadata['sample_size']} tournaments matching your criteria
+                                        
+                                        **Filters Applied:**
+                                        - Format: {personalized_metadata['filters_applied']['format'] or 'All'}
+                                        - Buy-in Range: ${buyin_range[0]:.0f} - ${buyin_range[1]:.0f}
+                                        """)
+                                
+                                # Show enhanced payout analysis with personalized probabilities
+                                with st.expander("💰 View Position Analysis: Payout, Probability & ROI"):
+                                    # Create enhanced analysis table
+                                    import pandas as pd
+                                    
+                                    # Use personalized distribution if available, otherwise uniform
+                                    if personalized_distribution is not None:
+                                        probability_source = "📊 **Personalized Probabilities** (Based on Your Tournament History)"
+                                    else:
+                                        probability_source = "📊 **Uniform Probabilities** (Equal chance for each position)"
+                                        personalized_distribution = np.ones(field_size) / field_size
+                                    
+                                    st.markdown(probability_source)
+                                    
+                                    # Create analysis data
+                                    analysis_data = []
+                                    
+                                    # Add paying positions
+                                    for i, (position, payout) in enumerate(zip(payout_structure['Position'], payout_structure['Payout ($)'])):
+                                        position_idx = int(position) - 1  # Convert to 0-based index
+                                        
+                                        if position_idx < len(personalized_distribution):
+                                            position_probability = personalized_distribution[position_idx]
+                                        else:
+                                            position_probability = 0
+                                            
+                                        roi = ((payout - total_investment) / total_investment * 100) if total_investment > 0 else 0
+                                        analysis_data.append({
+                                            'Position': f"{position}",
+                                            'Payout': f"${payout:,.0f}",
+                                            'Probability': f"{position_probability:.6f} ({position_probability*100:.3f}%)",
+                                            'ROI': f"{roi:+.1f}%"
+                                        })
+                                    
+                                    # Add non-paying positions summary
+                                    non_paying_positions = field_size - len(payout_structure)
+                                    if non_paying_positions > 0:
+                                        # Sum probabilities for all non-paying positions
+                                        non_paying_prob = sum(personalized_distribution[len(payout_structure):])
+                                        loss_roi = -100.0  # Complete loss
+                                        analysis_data.append({
+                                            'Position': f"{len(payout_structure)+1}-{field_size}",
+                                            'Payout': "$0",
+                                            'Probability': f"{non_paying_prob:.6f} ({non_paying_prob*100:.2f}%)",
+                                            'ROI': f"{loss_roi:.1f}%"
+                                        })
+                                    
+                                    # Create and display DataFrame
+                                    analysis_df = pd.DataFrame(analysis_data)
+                                    st.dataframe(analysis_df, use_container_width=True, hide_index=True)
+                                    
+                                    # Add summary statistics
+                                    st.markdown("**📈 Key Insights:**")
+                                    itm_prob = sum(personalized_distribution[:len(payout_structure)]) * 100
+                                    min_cash = payout_structure['Payout ($)'].iloc[-1] if len(payout_structure) > 0 else 0
+                                    min_cash_roi = ((min_cash - total_investment) / total_investment * 100) if total_investment > 0 and min_cash > 0 else -100
+                                    
+                                    col_a, col_b, col_c = st.columns(3)
+                                    with col_a:
+                                        st.metric("ITM Probability", f"{itm_prob:.2f}%")
+                                    with col_b:
+                                        st.metric("Min Cash ROI", f"{min_cash_roi:+.1f}%")
+                                    with col_c:
+                                        bubble_position = len(payout_structure) + 1 if len(payout_structure) < field_size else field_size
+                                        st.metric("Bubble Position", f"{bubble_position}")
+                                
+                            except ImportError as e:
+                                st.warning(f"⚠️ EV calculation module not available: {str(e)}")
+                                st.info("Proceeding with coaching analysis only...")
+                                ev = None
+                                total_investment = buy_in * (1 + num_rebuys) + addon_cost
+                            except Exception as e:
+                                st.error(f"Error calculating EV: {str(e)}")
+                                st.info("Falling back to standard analysis...")
+                                ev = None
+                                total_investment = buy_in * (1 + num_rebuys) + addon_cost
+                            
+                            # Create enhanced tournament analysis query with EV data
+                            ev_context = ""
+                            if ev is not None:
+                                roi_percent = (ev / total_investment * 100) if total_investment > 0 else 0
+                                ev_context = f"""
+MATHEMATICAL EV ANALYSIS:
+- Expected Value: ${ev:.2f}
+- Expected ROI: {roi_percent:.1f}%
+- Total Investment: ${total_investment:.0f}
+- Break-even Performance Required: Top {paid_percent:.0f}% of field
+
+"""
+                            
+                            tournament_query = f"""
+I'm considering playing a tournament with these details:
+- Venue: {venue}
+- Buy-in: ${buy_in}
+- Format: {format_type}
+- Expected Field Size: {field_size} players
+- Structure: {structure}
+- Rebuys: {rebuys_allowed} (Expected: {num_rebuys})
+- Add-on: {addon_available} (Cost: ${addon_cost})
+- Rake: {rake_percent}%
+- Players Paid: {paid_percent}%
+- Additional Details: {other_details if other_details else 'None provided'}
+
+{ev_context}Based on my tournament history data AND the mathematical EV analysis above, please analyze whether I should play this tournament. Provide specific recommendations for maximizing my ROI, compare the mathematical expectation with my historical performance, and give your confidence level in the recommendation."""
+                            
+                            # Initialize chat with tournament data and analysis
+                            user_tournaments = get_user_tournament_results(st.session_state["username"])
+                            tournament_context = ""
+                            
+                            if user_tournaments:
+                                # Get comprehensive tournament data for analysis
+                                total_tournaments = len(user_tournaments)
+                                total_profit = sum(t['prize_won'] - t['total_investment'] for t in user_tournaments)
+                                total_investment = sum(t['total_investment'] for t in user_tournaments)
+                                overall_roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
+                                itm_count = sum(1 for t in user_tournaments if t['prize_won'] > 0)
+                                itm_rate = (itm_count / total_tournaments * 100) if total_tournaments > 0 else 0
+                                
+                                # Performance by format
+                                live_tournaments = [t for t in user_tournaments if t.get('format') == 'Live']
+                                online_tournaments = [t for t in user_tournaments if t.get('format') == 'Online']
+                                
+                                live_roi = 0
+                                online_roi = 0
+                                if live_tournaments:
+                                    live_profit = sum(t['prize_won'] - t['total_investment'] for t in live_tournaments)
+                                    live_investment = sum(t['total_investment'] for t in live_tournaments)
+                                    live_roi = (live_profit / live_investment * 100) if live_investment > 0 else 0
+                                
+                                if online_tournaments:
+                                    online_profit = sum(t['prize_won'] - t['total_investment'] for t in online_tournaments)
+                                    online_investment = sum(t['total_investment'] for t in online_tournaments)
+                                    online_roi = (online_profit / online_investment * 100) if online_investment > 0 else 0
+                                
+                                # Get all tournament data in JSON format
+                                import json
+                                tournament_json_data = []
+                                
+                                for t in user_tournaments:
+                                    clean_tournament = {
+                                        "tournament_date": t.get('tournament_date'),
+                                        "venue": t.get('venue'),
+                                        "format": t.get('format'),
+                                        "buy_in": t.get('buy_in'),
+                                        "rebuys": t.get('rebuys', 0),
+                                        "add_ons": t.get('add_ons', 0),
+                                        "total_investment": t.get('total_investment'),
+                                        "total_entries": t.get('total_entries'),
+                                        "position_finished": t.get('position_finished'),
+                                        "prize_won": t.get('prize_won'),
+                                        "duration_hours": t.get('duration_hours', 0),
+                                        "notes": t.get('notes', ''),
+                                        "profit_loss": t.get('prize_won', 0) - t.get('total_investment', 0),
+                                        "roi_percent": ((t.get('prize_won', 0) - t.get('total_investment', 0)) / t.get('total_investment', 1) * 100)
+                                    }
+                                    tournament_json_data.append(clean_tournament)
+                                
+                                tournament_context = f"""
+USER TOURNAMENT PERFORMANCE DATA FOR ANALYSIS:
+
+Overall Performance Summary:
+- Total Tournaments: {total_tournaments}
+- Overall ROI: {overall_roi:.1f}%
+- ITM Rate: {itm_rate:.1f}%
+- Total Profit/Loss: ${total_profit:,.0f}
+- Total Investment: ${total_investment:,.0f}
+
+Format Performance:
+- Live Tournaments: {len(live_tournaments)} played, ROI: {live_roi:.1f}%
+- Online Tournaments: {len(online_tournaments)} played, ROI: {online_roi:.1f}%
+
+COMPLETE TOURNAMENT HISTORY (JSON FORMAT):
+{json.dumps(tournament_json_data, indent=2)}
+
+INSTRUCTIONS: Analyze this tournament data in context of the specific tournament the user is asking about. Compare venue performance, buy-in range success, format preferences, and field size patterns to provide a data-driven recommendation."""
+                            
+                            system_prompt = TOURNAMENT_STRATEGY_PROMPT
+                            if tournament_context:
+                                system_prompt += f"\n\n{tournament_context}"
+                            
+                            st.session_state.chat = [
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": tournament_query}
+                            ]
+                            
+                            # Get AI analysis
+                            try:
+                                response = client.chat.completions.create(
+                                    model="o3-mini",
+                                    reasoning_effort="medium",
+                                    messages=st.session_state.chat
+                                )
+                                
+                                reply = response.choices[0].message.content
+                                st.session_state.chat.append({"role": "assistant", "content": reply})
+                                
+                                # Save analysis to database
+                                save_chat(
+                                    st.session_state["username"],
+                                    st.session_state.coaching_mode,
+                                    st.session_state.chat
+                                )
+                                
+                                # Display the analysis
+                                st.divider()
+                                st.subheader("📊 Your Personalized Tournament Analysis")
+                                st.markdown(reply)
+                                
+                                # Option for follow-up questions
+                                st.divider()
+                                st.subheader("💬 Follow-up Questions")
+                                follow_up = st.text_input("Ask any follow-up questions about this analysis:", key="follow_up_question")
+                                if st.button("Ask Question") and follow_up:
+                                    st.session_state.chat.append({"role": "user", "content": follow_up})
+                                    
+                                    follow_response = client.chat.completions.create(
+                                        model="o3-mini",
+                                        reasoning_effort="medium",
+                                        messages=st.session_state.chat
+                                    )
+                                    
+                                    follow_reply = follow_response.choices[0].message.content
+                                    st.session_state.chat.append({"role": "assistant", "content": follow_reply})
+                                    
+                                    save_chat(
+                                        st.session_state["username"],
+                                        st.session_state.coaching_mode,
+                                        st.session_state.chat
+                                    )
+                                    
+                                    st.markdown("**Follow-up Answer:**")
+                                    st.markdown(follow_reply)
+                                    st.rerun()
+                                    
+                            except Exception as e:
+                                st.error(f"Error getting analysis: {str(e)}")
+
             else:
                 # Display mode-specific instructions
-                if mode == "Tournament Strategy":
-                    st.info("I'll help you develop a personalized tournament strategy. Tell me about your tournament experience, preferred formats, and goals!")
+                if mode == "Personalized Tournament Strategy Analysis":
+                    st.info("I'll analyze your tournament history data to recommend optimal tournament selection and strategies for maximizing your ROI. Let me review your past results and provide data-driven recommendations!")
 
                 # Input section with text and voice options
                 try:
