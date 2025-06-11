@@ -1,40 +1,22 @@
 import numpy as np
 import pandas as pd
 
-def player_distribution(num_players, distribution_type="uniform"):
-    """
-    Generate probability distribution p(x) of player finishing positions.
-    
-    Args:
-        num_players (int): Total number of players in tournament
-        distribution_type (str): Type of distribution to use
-            - "uniform": Equal probability of finishing in each position
-            - Additional distributions can be added later based on player data
-    
-    Returns:
-        numpy.ndarray: Array of probabilities for each position
-    """
-    if distribution_type == "uniform":
-        # Equal probability of finishing in each position
-        probabilities = np.ones(num_players) / num_players
-    else:
-        raise ValueError(f"Distribution type '{distribution_type}' not supported")
-    
-    return probabilities
-
 def player_pdf(tournament_history, field_size, format_filter=None, buyin_range=None):
     """
     Create a personalized probability distribution based on historical tournament performance.
+    If no tournament history is provided, returns uniform distribution.
+    
+    This is the centralized function for ALL probability calculations in the system.
     
     Args:
-        tournament_history (list): List of tournament results dictionaries
+        tournament_history (list): List of tournament results dictionaries (can be None/empty for uniform)
         field_size (int): Expected field size for the tournament being analyzed
         format_filter (str, optional): Filter by format ('Live' or 'Online')
         buyin_range (tuple, optional): Filter by buy-in range (min_buyin, max_buyin)
     
     Returns:
-        numpy.ndarray: Personalized probability array for each finishing position
-        dict: Analysis metadata (confidence_level, sample_size, etc.)
+        numpy.ndarray: Probability array for each finishing position (personalized or uniform)
+        dict: Analysis metadata (confidence_level, sample_size, method, etc.)
     """
     
     if not tournament_history:

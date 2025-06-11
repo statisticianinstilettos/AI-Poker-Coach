@@ -1,27 +1,6 @@
 import numpy as np
 from tournament import tournament_structure
-from player import player_distribution, player_pdf
-
-def player_distribution(num_players, distribution_type="uniform"):
-    """
-    Generate probability distribution p(x) of player finishing positions.
-    
-    Args:
-        num_players (int): Total number of players in tournament
-        distribution_type (str): Type of distribution to use
-            - "uniform": Equal probability of finishing in each position
-            - Additional distributions can be added later based on player data
-    
-    Returns:
-        numpy.ndarray: Array of probabilities for each position
-    """
-    if distribution_type == "uniform":
-        # Equal probability of finishing in each position
-        probabilities = np.ones(num_players) / num_players
-    else:
-        raise ValueError(f"Distribution type '{distribution_type}' not supported")
-    
-    return probabilities
+from player import player_pdf
 
 def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=None, rake_percent=0.1, paid_percent=0.15, tournament_history=None, format_filter=None, buyin_range=None):
     """
@@ -38,7 +17,7 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
         buy_in (float): Tournament buy-in amount (c)
         num_rebuys (int): Expected number of rebuys (r)
         p_distribution (numpy.ndarray, optional): Custom probability distribution.
-            If None, uses uniform distribution or creates personalized if tournament_history provided
+            If None, uses player_pdf (which handles both personalized and uniform distributions)
         rake_percent (float): Percentage of rake taken from buy-in
         paid_percent (float): Percentage of players who get paid
         tournament_history (list, optional): Historical tournament data for personalized distribution
@@ -51,18 +30,15 @@ def calculate_tournament_ev(num_players, buy_in, num_rebuys=0, p_distribution=No
     """
     metadata = None
     
-    # Get probability distribution
+    # Get probability distribution using centralized player_pdf method
     if p_distribution is not None:
         # Use provided distribution
         pass
-    elif tournament_history:
-        # Create personalized distribution from historical data
+    else:
+        # Use player_pdf for all probability calculations (handles both personalized and uniform)
         p_distribution, metadata = player_pdf(
             tournament_history, num_players, format_filter, buyin_range
         )
-    else:
-        # Use uniform distribution as fallback
-        p_distribution = player_distribution(num_players)
     
     # Get payout structure
     payout_table = tournament_structure(num_players, buy_in, rake_percent, paid_percent)

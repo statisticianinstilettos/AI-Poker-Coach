@@ -2,6 +2,9 @@ from pymongo import MongoClient
 import streamlit as st
 from datetime import datetime
 from bson import ObjectId
+import os
+import json
+from src.utils.calculations import calculate_roi
 
 # Initialize MongoDB connection - clean and simple
 @st.cache_resource
@@ -89,7 +92,7 @@ def get_user_stats(username):
     stats = list(tournaments.aggregate(pipeline))
     if stats:
         stats = stats[0]
-        stats["roi"] = (stats["total_profit"] / stats["total_investment"] * 100) if stats["total_investment"] > 0 else 0
+        stats["roi"] = calculate_roi(stats["total_profit"], stats["total_investment"])
         stats["itm_percentage"] = (stats["itm_finishes"] / stats["total_tournaments"] * 100) if stats["total_tournaments"] > 0 else 0
         return stats
     return None
