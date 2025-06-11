@@ -3,39 +3,17 @@ import streamlit as st
 from datetime import datetime
 from bson import ObjectId
 
-# Initialize MongoDB connection
+# Initialize MongoDB connection - clean and simple
 @st.cache_resource
-def init_connection():
-    try:
-        # Sorry for overcomplicating this earlier! 
-        # MongoDB + Streamlit is actually super simple:
-        # 1. Use mongodb+srv:// protocol in your connection string
-        # 2. Let MongoDB's driver handle the connection details
-        # That's it! No fancy SSL/TLS config needed.
-        return MongoClient(st.secrets["MONGODB_URI"])
-    except Exception as e:
-        st.error(f"Failed to connect to MongoDB: {str(e)}")
-        return None
-
-def get_database():
-    client = init_connection()
-    if client is None:
-        st.error("Could not establish database connection")
-        return None
-    try:
-        # Verify connection is working
-        client.admin.command('ping')
-        return client.poker_coach_db
-    except Exception as e:
-        st.error(f"Database connection test failed: {str(e)}")
-        return None
+def get_db():
+    uri = st.secrets["MONGODB_URI"]
+    client = MongoClient(uri)
+    return client.poker_coach_db
 
 # User operations
 def create_user(username, password):
     """Create a new user"""
-    db = get_database()
-    if db is None:
-        return None
+    db = get_db()
     users = db.users
     user_data = {
         "_id": ObjectId(),  # MongoDB's internal ID
@@ -52,13 +30,13 @@ def create_user(username, password):
 
 def get_user_by_username(username):
     """Get user by their username"""
-    db = get_database()
+    db = get_db()
     return db.users.find_one({"username": username})
 
 # Chat operations
 def save_chat(username, mode, messages):
     """Save chat with username reference"""
-    db = get_database()
+    db = get_db()
     chats = db.chats
     chat_data = {
         "_id": ObjectId(),  # MongoDB's internal ID
@@ -71,13 +49,13 @@ def save_chat(username, mode, messages):
 
 def get_user_chats(username):
     """Get chats by username"""
-    db = get_database()
+    db = get_db()
     return list(db.chats.find({"username": username}).sort("timestamp", -1))
 
 # Tournament results operations
 def save_tournament_result(username, tournament_data):
     """Save tournament result with username reference"""
-    db = get_database()
+    db = get_db()
     tournaments = db.tournaments
     tournament_data.update({
         "_id": ObjectId(),  # MongoDB's internal ID
@@ -88,7 +66,7 @@ def save_tournament_result(username, tournament_data):
 
 def get_user_tournament_results(username):
     """Get tournament results by username"""
-    db = get_database()
+    db = get_db()
     return list(db.tournaments.find({"username": username}).sort([
         ("tournament_date", -1),  # Sort by date first (most recent first)
         ("timestamp", -1)  # Then by timestamp
@@ -96,7 +74,7 @@ def get_user_tournament_results(username):
 
 def get_user_stats(username):
     """Get user stats by username"""
-    db = get_database()
+    db = get_db()
     tournaments = db.tournaments
     pipeline = [
         {"$match": {"username": username}},
