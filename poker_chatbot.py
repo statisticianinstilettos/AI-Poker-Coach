@@ -273,7 +273,7 @@ try:
                                     "format": t.get('format'),
                                     "buy_in": t.get('buy_in'),
                                     "rebuys": t.get('rebuys', 0),
-                                    "add_ons": t.get('add_ons', 0),
+                                    "add_on_cost": t.get('add_on_cost', 0),
                                     "total_investment": t.get('total_investment'),
                                     "total_entries": t.get('total_entries'),
                                     "position_finished": t.get('position_finished'),
@@ -452,13 +452,13 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                     try:
                         col1, col2 = st.columns(2)
                         with col1:
-                            venue = st.text_input("Venue (Casino/Online Site)")
+                            venue = st.text_input("Venue/Location", placeholder="e.g., Bellagio, PokerStars, Borgata")
                             format_type = st.selectbox("Format", ["Live", "Online"])
                             tournament_date = st.date_input("Tournament Date")
-                            buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0)
+                            buy_in = st.number_input("Buy-in Amount ($)", min_value=0.0, step=1.0)
                             rebuys = st.number_input("Number of Rebuys", min_value=0, step=1)
-                            add_ons = st.number_input("Number of Add-ons", min_value=0, step=1)
-                            total_entries = st.number_input("Total Entries", min_value=1, step=1)
+                            add_on_cost = st.number_input("Add-on ($)", min_value=0.0, step=1.0, help="Total amount spent on add-ons")
+                            total_entries = st.number_input("Total Entries", min_value=1, step=1, help="Total number of players in the tournament")
                         
                         with col2:
                             position = st.number_input("Position Finished", min_value=1, step=1)
@@ -484,21 +484,21 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                             ante_structure = st.selectbox("Ante Structure", ["No Ante", "Ante Later Levels", "Ante All Levels"])
                             level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, value=20, help="Length of each blind level in minutes")
                         
-                        notes = st.text_area("Tournament Notes")
+                        notes = st.text_area("Tournament Notes", placeholder="Any additional notes about this tournament")
                         
-                        submitted = st.form_submit_button("Save Result")
+                        submitted = st.form_submit_button("Save Tournament Result")
                         if submitted:
                             if not venue:
                                 st.error("Please enter a venue name")
                             else:
-                                total_investment = buy_in * (1 + rebuys) + (add_ons * buy_in)
+                                total_investment = buy_in * (1 + rebuys) + add_on_cost
                                 tournament_data = {
                                     "venue": venue,
                                     "format": format_type,
                                     "tournament_date": tournament_date.strftime("%Y-%m-%d"),
                                     "buy_in": buy_in,
                                     "rebuys": rebuys,
-                                    "add_ons": add_ons,
+                                    "add_on_cost": add_on_cost,
                                     "total_investment": total_investment,
                                     "total_entries": total_entries,
                                     "position_finished": position,
@@ -536,15 +536,15 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                                 with st.form("edit_tournament_result"):
                                     col1, col2 = st.columns(2)
                                     with col1:
-                                        venue = st.text_input("Venue (Casino/Online Site)", value=tournament_to_edit.get('venue', ''))
+                                        venue = st.text_input("Venue/Location", value=tournament_to_edit.get('venue', ''), placeholder="e.g., Bellagio, PokerStars, Borgata")
                                         format_type = st.selectbox("Format", ["Live", "Online"], 
                                                                   index=0 if tournament_to_edit.get('format') == 'Live' else 1)
                                         tournament_date = st.date_input("Tournament Date", 
                                                                        value=pd.to_datetime(tournament_to_edit.get('tournament_date')).date() if tournament_to_edit.get('tournament_date') else None)
-                                        buy_in = st.number_input("Buy-in ($)", min_value=0.0, step=1.0, value=float(tournament_to_edit.get('buy_in', 0)))
+                                        buy_in = st.number_input("Buy-in Amount ($)", min_value=0.0, step=1.0, value=float(tournament_to_edit.get('buy_in', 0)))
                                         rebuys = st.number_input("Number of Rebuys", min_value=0, step=1, value=int(tournament_to_edit.get('rebuys', 0)))
-                                        add_ons = st.number_input("Number of Add-ons", min_value=0, step=1, value=int(tournament_to_edit.get('add_ons', 0)))
-                                        total_entries = st.number_input("Total Entries", min_value=1, step=1, value=int(tournament_to_edit.get('total_entries', 1)))
+                                        add_on_cost = st.number_input("Add-on ($)", min_value=0.0, step=1.0, value=float(tournament_to_edit.get('add_on_cost', 0)), help="Total amount spent on add-ons")
+                                        total_entries = st.number_input("Total Entries", min_value=1, step=1, value=int(tournament_to_edit.get('total_entries', 1)), help="Total number of players in the tournament")
                                     
                                     with col2:
                                         position = st.number_input("Position Finished", min_value=1, step=1, value=int(tournament_to_edit.get('position_finished', 1)))
@@ -570,15 +570,15 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                                         structure_index = tournament_structure_options.index(current_structure) if current_structure in tournament_structure_options else 0
                                         tournament_structure = st.selectbox("Tournament Structure", tournament_structure_options, index=structure_index)
                                         starting_stack = st.number_input("Starting Chip Stack", min_value=1000, step=1000, 
-                                                                        value=int(tournament_to_edit.get('starting_stack', 20000)))
+                                                                        value=int(tournament_to_edit.get('starting_stack', 20000)), help="Starting chips (e.g., 20,000)")
                                         ante_structure_options = ["No Ante", "Ante Later Levels", "Ante All Levels"]
                                         current_ante = tournament_to_edit.get('ante_structure', 'No Ante')
                                         ante_index = ante_structure_options.index(current_ante) if current_ante in ante_structure_options else 0
                                         ante_structure = st.selectbox("Ante Structure", ante_structure_options, index=ante_index)
                                         level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, 
-                                                                    value=int(tournament_to_edit.get('level_time_minutes', 20)))
+                                                                    value=int(tournament_to_edit.get('level_time_minutes', 20)), help="Length of each blind level in minutes")
                                     
-                                    notes = st.text_area("Tournament Notes", value=tournament_to_edit.get('notes', ''))
+                                    notes = st.text_area("Tournament Notes", value=tournament_to_edit.get('notes', ''), placeholder="Any additional notes about this tournament")
                                     
                                     col_save, col_cancel = st.columns(2)
                                     with col_save:
@@ -586,14 +586,14 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                                             if not venue:
                                                 st.error("Please enter a venue name")
                                             else:
-                                                total_investment = buy_in * (1 + rebuys) + (add_ons * buy_in)
+                                                total_investment = buy_in * (1 + rebuys) + add_on_cost
                                                 updated_tournament_data = {
                                                     "venue": venue,
                                                     "format": format_type,
                                                     "tournament_date": tournament_date.strftime("%Y-%m-%d"),
                                                     "buy_in": buy_in,
                                                     "rebuys": rebuys,
-                                                    "add_ons": add_ons,
+                                                    "add_on_cost": add_on_cost,
                                                     "total_investment": total_investment,
                                                     "total_entries": total_entries,
                                                     "position_finished": position,
@@ -718,7 +718,7 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                                     'Format': result['format'],
                                     'Buy-in': result['buy_in'],
                                     'Rebuys': result.get('rebuys', 0),
-                                    'Add-ons': result.get('add_ons', 0),
+                                    'Add-on Cost': result.get('add_on_cost', 0),
                                     'Total Investment': result['total_investment'],
                                     'Total Entries': result['total_entries'],
                                     'Position Finished': result['position_finished'],
@@ -781,47 +781,16 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                 st.info("Fill out the details of the tournament you're considering, and I'll analyze your historical data to provide personalized recommendations.")
                 
                 with st.form("tournament_analysis"):
-                    st.subheader("Tournament Details")
+                    st.subheader("Tournament Structure")
                     
                     col1, col2 = st.columns(2)
                     with col1:
                         venue = st.text_input("Venue/Location*", placeholder="e.g., Bellagio, PokerStars, Borgata")
                         buy_in = st.number_input("Buy-in Amount ($)*", min_value=0.0, step=1.0, value=100.0)
                         format_type = st.selectbox("Format*", ["Live", "Online"])
-                        field_size = st.number_input("Expected Field Size*", min_value=1, step=1, value=100, help="Expected number of players")
-                        
-                        # EV Calculation Parameters
-                        st.subheader("Tournament Structure & EV Analysis")
-                        rake_percent = st.number_input("Rake Percentage (%)", min_value=0.0, max_value=50.0, step=0.5, value=10.0, help="Tournament rake percentage (typically 10-15%)")
-                        paid_percent = st.number_input("Players Paid (%)", min_value=1.0, max_value=100.0, step=1.0, value=15.0, help="Percentage of field that gets paid (typically 10-20%)")
+                        field_size = st.number_input("Total Entries*", min_value=1, step=1, value=100, help="Expected number of players in the tournament")
                     
                     with col2:
-                        structure = st.selectbox("Tournament Structure", 
-                                                ["Multi-Table Tournament (MTT)",
-                                                 "Deep Stack",
-                                                 "Turbo",
-                                                 "Hyper Turbo",
-                                                 "Bounty/Progressive Knockout",
-                                                 "Freezeout",
-                                                 "Rebuy",
-                                                 "Satellite",
-                                                 "Sit & Go",
-                                                 "Single Table Tournament",
-                                                 "Other"])
-                        rebuys_allowed = st.selectbox("Rebuys Allowed?", ["No", "Yes - Limited", "Yes - Unlimited"])
-                        
-                        # Conditional rebuy details
-                        num_rebuys = 0
-                        if rebuys_allowed != "No":
-                            num_rebuys = st.number_input("Expected Number of Rebuys", min_value=0, step=1, value=1, help="How many rebuys do you typically use?")
-                        
-                        addon_available = st.selectbox("Add-on Available?", ["No", "Yes"])
-                        addon_cost = 0
-                        if addon_available == "Yes":
-                            addon_cost = st.number_input("Add-on Cost ($)", min_value=0.0, step=1.0, value=buy_in, help="Cost of the add-on (often same as buy-in)")
-                        
-                        # Tournament Structure
-                        st.subheader("Tournament Structure")
                         tournament_structure = st.selectbox("Tournament Structure", [
                             "Multi-Table Tournament (MTT)",
                             "Deep Stack",
@@ -838,9 +807,23 @@ INSTRUCTIONS: Analyze this tournament data to identify patterns and provide spec
                         starting_stack = st.number_input("Starting Chip Stack", min_value=1000, step=1000, value=20000, help="Starting chips (e.g., 20,000)")
                         ante_structure = st.selectbox("Ante Structure", ["No Ante", "Ante Later Levels", "Ante All Levels"])
                         level_time = st.number_input("Level Time (minutes)", min_value=5, step=5, value=20, help="Length of each blind level in minutes")
+                        rake_percent = st.number_input("Rake Percentage (%)", min_value=0.0, max_value=50.0, step=0.5, value=10.0, help="Tournament rake percentage (typically 10-15%)")
+                        paid_percent = st.number_input("Players Paid (%)", min_value=1.0, max_value=100.0, step=1.0, value=15.0, help="Percentage of field that gets paid (typically 10-20%)")
                         
-                        other_details = st.text_area("Other Details", 
-                                                   placeholder="Any other relevant info: special format, etc.")
+                        # Rebuy/Add-on Details
+                        rebuys_allowed = st.selectbox("Rebuys Allowed?", ["No", "Yes - Limited", "Yes - Unlimited"])
+                        
+                        # Conditional rebuy details
+                        num_rebuys = 0
+                        if rebuys_allowed != "No":
+                            num_rebuys = st.number_input("Number of Rebuys", min_value=0, step=1, value=1, help="How many rebuys do you typically use?")
+                        
+                        addon_available = st.selectbox("Add-on Available?", ["No", "Yes"])
+                        addon_cost = 0
+                        if addon_available == "Yes":
+                            addon_cost = st.number_input("Add-on ($)", min_value=0.0, step=1.0, value=buy_in, help="Cost of the add-on (often same as buy-in)")
+                    
+                    other_details = st.text_area("Tournament Notes", placeholder="Any other relevant info about this tournament")
                     
                     st.markdown("*Required fields")
                     
@@ -1055,7 +1038,7 @@ I'm considering playing a tournament with these details:
 - Buy-in: ${buy_in}
 - Format: {format_type}
 - Expected Field Size: {field_size} players
-- Structure: {structure}
+- Structure: {tournament_structure}
 - Rebuys: {rebuys_allowed} (Expected: {num_rebuys})
 - Add-on: {addon_available} (Cost: ${addon_cost})
 - Rake: {rake_percent}%
@@ -1109,7 +1092,7 @@ Consider how the tournament structure (starting stack, level time, ante structur
                                         "format": t.get('format'),
                                         "buy_in": t.get('buy_in'),
                                         "rebuys": t.get('rebuys', 0),
-                                        "add_ons": t.get('add_ons', 0),
+                                        "add_on_cost": t.get('add_on_cost', 0),
                                         "total_investment": t.get('total_investment'),
                                         "total_entries": t.get('total_entries'),
                                         "position_finished": t.get('position_finished'),
@@ -1297,7 +1280,7 @@ INSTRUCTIONS: Analyze this tournament data in context of the specific tournament
                                                         "format": t.get('format'),
                                                         "buy_in": t.get('buy_in'),
                                                         "rebuys": t.get('rebuys', 0),
-                                                        "add_ons": t.get('add_ons', 0),
+                                                        "add_on_cost": t.get('add_on_cost', 0),
                                                         "total_investment": t.get('total_investment'),
                                                         "total_entries": t.get('total_entries'),
                                                         "position_finished": t.get('position_finished'),
