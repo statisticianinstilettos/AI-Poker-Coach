@@ -1,5 +1,11 @@
 # AI Poker Coach
-AI poker coach powered by RL and LLMs 
+AI poker coach powered by RL and LLMs.
+
+Your AI Poker Coach comes with:
+✅ Comprehensive tournament result tracking. 
+✅ Personalized Mathematical models for expected value calculations to guide Tourmament selectionand Strategy 
+✅ AI chat for personalized coaching
+
 
 <p align="center">
 <img src="images/blonde-poker-coach.png" width=200>
