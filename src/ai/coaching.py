@@ -83,65 +83,6 @@ Remember: You have access to their complete tournament history in JSON format. U
 
 
 @opik.track
-def initialize_chat_session(username, coaching_mode, user_tournaments=None):
-    """
-    Initialize chat session with appropriate context and system prompt.
-    
-    Args:
-        username (str): Current username
-        coaching_mode (str): Selected coaching mode
-        user_tournaments (list): User's tournament history
-        
-    Returns:
-        list: Initialized chat messages
-    """
-    tournament_context = ""
-    
-    if user_tournaments:
-        if coaching_mode == "Personalized Tournament Strategy Analysis":
-            # Comprehensive tournament analysis for strategy mode
-            tournament_context = create_tournament_analysis_context(user_tournaments)
-        else:
-            # Basic context for other modes
-            total_tournaments = len(user_tournaments)
-            recent_results = user_tournaments[:3]  # Last 3 tournaments
-            tournament_context = f"Context: The user has played {total_tournaments} tracked tournaments. "
-            tournament_context += "Recent results: " + ", ".join([
-                f"${t['prize_won']} won (${t['total_investment']} invested)" for t in recent_results
-            ])
-    
-    # Get relevant chat history
-    past_chats = get_user_chats(username)
-    chat_context = ""
-    if past_chats:
-        # Filter chats by current mode
-        mode_chats = [chat for chat in past_chats if chat['mode'] == coaching_mode]
-        if mode_chats:
-            # Get the last 3 relevant conversations
-            recent_chats = mode_chats[:3]
-            chat_context = "\n\nPrevious relevant conversations:\n"
-            for chat in recent_chats:
-                # Extract key exchanges from each chat
-                messages = chat['messages']
-                # Skip system message and get user-assistant pairs
-                for i in range(1, len(messages)-1, 2):
-                    chat_context += f"User: {messages[i]['content']}\n"
-                    chat_context += f"Coach: {messages[i+1]['content']}\n"
-    
-    system_prompt = GENERAL_COACHING_PROMPT if coaching_mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
-    
-    # Add context to system prompt
-    if tournament_context:
-        system_prompt += f"\n\n{tournament_context}"
-    if chat_context:
-        system_prompt += f"\n{chat_context}\n\nUse the above conversation history to maintain consistency in your advice and build upon previous discussions. If you see patterns in the user's questions or areas they frequently ask about, address those topics more thoroughly."
-    
-    # Log the system prompt to the Opik trace as the trace name (string)
-    opik_context.update_current_trace(name=system_prompt)
-    return [{"role": "system", "content": system_prompt}]
-
-
-@opik.track
 def process_chat_message(client, messages, username, coaching_mode):
     """
     Process chat message with OpenAI and save to database.
@@ -250,21 +191,36 @@ Use this performance data to provide personalized recommendations. Focus on:
 
 Provide specific, actionable advice based on the user's actual results.""" 
 
-@opik.track(name="llm_chat")
-def chat_pipeline(user_input, username, coaching_mode):
-    user_tournaments = retrieve_user_chats(username, coaching_mode)
-    messages = build_context(username, coaching_mode, user_tournaments)
-    messages.append({"role": "user", "content": user_input})
-    reply = generate_llm_response(tracked_client, messages, username, coaching_mode)
-    save_chat_to_db(username, coaching_mode, messages + ([{"role": "assistant", "content": reply}] if reply else []))
-    return reply
 
 @opik.track
-def retrieve_user_chats(username, coaching_mode):
+def retrieve_user_tournaments(username, coaching_mode):
     return get_user_tournament_results(username)
 
 @opik.track
-def build_context(username, coaching_mode, user_tournaments):
+def retrieve_chat_history(username, coaching_mode):
+    past_chats = get_user_chats(username)
+    chat_context = ""
+    if past_chats:
+        mode_chats = [chat for chat in past_chats if chat['mode'] == coaching_mode]
+        if mode_chats:
+            recent_chats = mode_chats[:3]
+            chat_context = "\n\nPrevious relevant conversations:\n"
+            for chat in recent_chats:
+                messages = chat['messages']
+                for i in range(1, len(messages)-1, 2):
+                    chat_context += f"User: {messages[i]['content']}\n"
+                    chat_context += f"Coach: {messages[i+1]['content']}\n"
+    return chat_context
+
+@opik.track(name="user_profile_analysis")
+def user_profile_analysis(username, coaching_mode):
+    user_tournaments = retrieve_user_tournaments(username, coaching_mode)
+    chat_context = retrieve_chat_history(username, coaching_mode)
+    messages = inject_prompt(username, coaching_mode, user_tournaments, chat_context)
+    return messages
+
+@opik.track
+def inject_prompt(username, coaching_mode, user_tournaments, chat_context):
     tournament_context = ""
     if user_tournaments:
         if coaching_mode == "Personalized Tournament Strategy Analysis":
@@ -279,12 +235,22 @@ def build_context(username, coaching_mode, user_tournaments):
     system_prompt = GENERAL_COACHING_PROMPT if coaching_mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
     if tournament_context:
         system_prompt += f"\n\n{tournament_context}"
+    if chat_context:
+        system_prompt += f"\n{chat_context}\n\nUse the above conversation history to maintain consistency in your advice and build upon previous discussions. If you see patterns in the user's questions or areas they frequently ask about, address those topics more thoroughly."
     opik_context.update_current_trace(metadata={"system_prompt": system_prompt})
     return [{"role": "system", "content": system_prompt}]
 
-@opik.track
-def save_chat_to_db(username, coaching_mode, messages):
-    return save_chat(username, coaching_mode, messages)
+@opik.track(name="llm_chat")
+def chat_pipeline(user_input, username, coaching_mode):
+    opik_context.update_current_trace(metadata={
+        "coaching_mode": coaching_mode,
+        "model": OPENAI_MODEL
+    })
+    messages = user_profile_analysis(username, coaching_mode)
+    messages.append({"role": "user", "content": user_input})
+    reply = generate_llm_response(tracked_client, messages, username, coaching_mode)
+    save_chat(username, coaching_mode, messages + ([{"role": "assistant", "content": reply}] if reply else []))
+    return reply
 
 @opik.track
 def generate_llm_response(tracked_client, messages, username, coaching_mode):
