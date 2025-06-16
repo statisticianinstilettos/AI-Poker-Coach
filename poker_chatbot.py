@@ -3,6 +3,7 @@ Poker Coach GPT - Main Application
 A clean, modular poker coaching application with tournament analysis capabilities.
 """
 
+import os
 import streamlit as st
 import io
 from streamlit_mic_recorder import mic_recorder
@@ -11,7 +12,7 @@ from streamlit_mic_recorder import mic_recorder
 from src.config import PAGE_TITLE, PAGE_ICON, DARK_THEME_CSS
 from src.auth.authentication import handle_authentication, get_current_username
 from src.ui.sidebar import setup_sidebar
-from src.ai.coaching import setup_openai, initialize_chat_session, process_chat_message
+from src.ai.coaching import chat_pipeline
 from src.forms.tournament_forms import (
     create_tournament_entry_form, 
     create_tournament_edit_form, 
@@ -19,6 +20,11 @@ from src.forms.tournament_forms import (
 )
 from src.ui.tournament_display import display_tournament_results
 from database import get_user_tournament_results
+
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+os.environ["OPIK_API_KEY"] = st.secrets["OPIK_API_KEY"]
+os.environ["OPIK_WORKSPACE"] = "statisticianinstilettos"
+os.environ["OPIK_PROJECT_NAME"] = "My-Poker-Coach"
 
 
 def initialize_session_state():
@@ -40,26 +46,12 @@ def process_text_message():
     if st.session_state.user_message and st.session_state.user_message != st.session_state.last_processed_input:
         user_input = st.session_state.user_message
         st.session_state.last_processed_input = user_input
-        
         username = get_current_username()
         coaching_mode = st.session_state.coaching_mode
-        
-        # Initialize chat if empty
-        if len(st.session_state.chat) == 0:
-            user_tournaments = get_user_tournament_results(username)
-            st.session_state.chat = initialize_chat_session(username, coaching_mode, user_tournaments)
-        
-        # Add user message and get response
-        st.session_state.chat.append({"role": "user", "content": user_input})
-        
-        # Get AI response
-        client, _ = setup_openai()
-        reply = process_chat_message(client, st.session_state.chat, username, coaching_mode)
-        
+        reply = chat_pipeline(user_input, username, coaching_mode)
         if reply:
+            st.session_state.chat.append({"role": "user", "content": user_input})
             st.session_state.chat.append({"role": "assistant", "content": reply})
-        
-        # Clear the input field
         st.session_state.user_message = ""
 
 
@@ -68,26 +60,12 @@ def process_voice_input(transcript_text):
     if transcript_text and transcript_text != st.session_state.last_processed_input:
         user_input = transcript_text
         st.session_state.last_processed_input = user_input
-        
         username = get_current_username()
         coaching_mode = st.session_state.coaching_mode
-        
-        # Initialize chat if empty
-        if len(st.session_state.chat) == 0:
-            user_tournaments = get_user_tournament_results(username)
-            st.session_state.chat = initialize_chat_session(username, coaching_mode, user_tournaments)
-        
-        # Add user message and get response
-        st.session_state.chat.append({"role": "user", "content": user_input})
-        
-        # Get AI response
-        client, _ = setup_openai()
-        reply = process_chat_message(client, st.session_state.chat, username, coaching_mode)
-        
+        reply = chat_pipeline(user_input, username, coaching_mode)
         if reply:
+            st.session_state.chat.append({"role": "user", "content": user_input})
             st.session_state.chat.append({"role": "assistant", "content": reply})
-        
-        # Trigger rerun to show new conversation
         st.rerun()
 
 

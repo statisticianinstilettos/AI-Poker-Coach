@@ -5,6 +5,7 @@ from bson import ObjectId
 import os
 import json
 from src.utils.calculations import calculate_roi
+import opik
 
 # Initialize MongoDB connection - clean and simple
 @st.cache_resource
@@ -37,6 +38,7 @@ def get_user_by_username(username):
     return db.users.find_one({"username": username})
 
 # Chat operations
+@opik.track(name="save_chat")
 def save_chat(username, mode, messages):
     """Save chat with username reference"""
     db = get_db()
@@ -50,6 +52,7 @@ def save_chat(username, mode, messages):
     }
     return chats.insert_one(chat_data)
 
+@opik.track(name="get_user_chats")
 def get_user_chats(username):
     """Get chats by username"""
     db = get_db()

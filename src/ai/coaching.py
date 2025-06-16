@@ -2,39 +2,21 @@
 AI Coaching module for Poker Coach application.
 Handles chat sessions, AI responses, and tournament context generation.
 """
-
-import streamlit as st
-import os
 import opik
 from openai import OpenAI
 from opik import track, opik_context
 from opik.integrations.openai import track_openai
 from datetime import datetime, timedelta
 from src.utils.calculations import calculate_overall_performance, calculate_performance_by_format
+import streamlit as st
 
 from src.config import OPENAI_MODEL, REASONING_EFFORT
-from database import save_chat, get_user_chats
+from database import save_chat, get_user_chats, get_user_tournament_results
 
-
-# Initialize OpenAI clients
-def setup_openai():
-    """Initialize OpenAI clients and Opik tracking."""
-    os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-    os.environ["OPIK_API_KEY"] = st.secrets["OPIK_API_KEY"]
-    os.environ["OPIK_WORKSPACE"] = "statisticianinstilettos" 
-    os.environ["OPIK_PROJECT_NAME"] = "My-Poker-Coach"
-    
-    opik.configure(use_local=False)
-    
-    client = OpenAI()
-    tracked_client = track_openai(client)
-    
-    # Initialize OpenAI client for Whisper
-    if 'openai_client' not in st.session_state:
-        st.session_state.openai_client = OpenAI()
-    
-    return client, tracked_client
-
+# Configure Opik and instantiate OpenAI client only once
+opik.configure(use_local=False)
+client = OpenAI()
+tracked_client = track_openai(client)
 
 # System prompts
 GENERAL_COACHING_PROMPT = """You are Poker Coach GPT — a sharp, friendly, and brutally effective AI coach for No-Limit Texas Hold'em.
@@ -100,6 +82,7 @@ Your Approach:
 Remember: You have access to their complete tournament history in JSON format. Use this data to provide personalized, evidence-based recommendations for the specific tournament they're asking about. Always tie your advice back to their actual results in similar situations."""
 
 
+@opik.track
 def initialize_chat_session(username, coaching_mode, user_tournaments=None):
     """
     Initialize chat session with appropriate context and system prompt.
@@ -153,9 +136,45 @@ def initialize_chat_session(username, coaching_mode, user_tournaments=None):
     if chat_context:
         system_prompt += f"\n{chat_context}\n\nUse the above conversation history to maintain consistency in your advice and build upon previous discussions. If you see patterns in the user's questions or areas they frequently ask about, address those topics more thoroughly."
     
+    # Log the system prompt to the Opik trace as the trace name (string)
+    opik_context.update_current_trace(name=system_prompt)
     return [{"role": "system", "content": system_prompt}]
 
 
+@opik.track
+def process_chat_message(client, messages, username, coaching_mode):
+    """
+    Process chat message with OpenAI and save to database.
+    
+    Args:
+        client: OpenAI client
+        messages (list): Chat messages
+        username (str): Current username
+        coaching_mode (str): Selected coaching mode
+        
+    Returns:
+        str: AI response
+    """
+    try:
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            reasoning_effort=REASONING_EFFORT,
+            messages=messages
+        )
+        
+        reply = response.choices[0].message.content
+        
+        # Save chat to database
+        save_chat(username, coaching_mode, messages + [{"role": "assistant", "content": reply}])
+        
+        return reply
+        
+    except Exception as e:
+        st.error(f"Error processing chat message: {str(e)}")
+        return None 
+
+
+@opik.track
 def create_tournament_analysis_context(user_tournaments):
     """
     Create comprehensive tournament analysis context for strategy mode.
@@ -229,36 +248,54 @@ Use this performance data to provide personalized recommendations. Focus on:
 4. Recent performance trends
 5. Risk assessment based on bankroll and variance
 
-Provide specific, actionable advice based on the user's actual results."""
+Provide specific, actionable advice based on the user's actual results.""" 
 
+@opik.track(name="llm_chat")
+def chat_pipeline(user_input, username, coaching_mode):
+    user_tournaments = retrieve_user_chats(username, coaching_mode)
+    messages = build_context(username, coaching_mode, user_tournaments)
+    messages.append({"role": "user", "content": user_input})
+    reply = generate_llm_response(tracked_client, messages, username, coaching_mode)
+    save_chat_to_db(username, coaching_mode, messages + ([{"role": "assistant", "content": reply}] if reply else []))
+    return reply
 
-def process_chat_message(client, messages, username, coaching_mode):
-    """
-    Process chat message with OpenAI and save to database.
-    
-    Args:
-        client: OpenAI client
-        messages (list): Chat messages
-        username (str): Current username
-        coaching_mode (str): Selected coaching mode
-        
-    Returns:
-        str: AI response
-    """
+@opik.track
+def retrieve_user_chats(username, coaching_mode):
+    return get_user_tournament_results(username)
+
+@opik.track
+def build_context(username, coaching_mode, user_tournaments):
+    tournament_context = ""
+    if user_tournaments:
+        if coaching_mode == "Personalized Tournament Strategy Analysis":
+            tournament_context = create_tournament_analysis_context(user_tournaments)
+        else:
+            total_tournaments = len(user_tournaments)
+            recent_results = user_tournaments[:3]
+            tournament_context = f"Context: The user has played {total_tournaments} tracked tournaments. "
+            tournament_context += "Recent results: " + ", ".join([
+                f"${t['prize_won']} won (${t['total_investment']} invested)" for t in recent_results
+            ])
+    system_prompt = GENERAL_COACHING_PROMPT if coaching_mode == "General Coaching Chat" else TOURNAMENT_STRATEGY_PROMPT
+    if tournament_context:
+        system_prompt += f"\n\n{tournament_context}"
+    opik_context.update_current_trace(metadata={"system_prompt": system_prompt})
+    return [{"role": "system", "content": system_prompt}]
+
+@opik.track
+def save_chat_to_db(username, coaching_mode, messages):
+    return save_chat(username, coaching_mode, messages)
+
+@opik.track
+def generate_llm_response(tracked_client, messages, username, coaching_mode):
     try:
-        response = client.chat.completions.create(
+        response = tracked_client.chat.completions.create(
             model=OPENAI_MODEL,
             reasoning_effort=REASONING_EFFORT,
             messages=messages
         )
-        
         reply = response.choices[0].message.content
-        
-        # Save chat to database
-        save_chat(username, coaching_mode, messages + [{"role": "assistant", "content": reply}])
-        
         return reply
-        
     except Exception as e:
         st.error(f"Error processing chat message: {str(e)}")
-        return None 
+        return None
