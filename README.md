@@ -8,11 +8,6 @@ Your AI Poker Coach comes with:
 
 read more about it here: https://statistician-in-stilettos.medium.com/building-an-ai-poker-coaching-app-af9a98d4d16b 
 
-
-<p align="center">
-<img src="images/blonde-poker-coach.png" width=200>
-</p>
-
 🚀 To run it locally: (for MAC obviously)
 1. Clone this repo.
 2. Open your terminal and navigate to the project directory: cd path/to/your/project
