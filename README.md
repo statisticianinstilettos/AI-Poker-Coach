@@ -3,8 +3,10 @@ AI poker coach powered by real mathematics and LLMs.
 
 Your AI Poker Coach comes with:
 ✅ Comprehensive tournament result tracking. 
-✅ Personalized Mathematical models for expected value calculations to guide Tourmament selectionand Strategy 
-✅ AI chat for personalized coaching
+✅ Personalized Mathematical models for Tourmament outcomes 
+✅ AI chat assistant for personalized coaching
+
+read more about it here: https://statistician-in-stilettos.medium.com/building-an-ai-poker-coaching-app-af9a98d4d16b 
 
 
 <p align="center">
@@ -23,7 +25,6 @@ Your AI Poker Coach comes with:
    - Add your OpenAI API key to the file. Paste in: OPENAI_API_KEY = "sk-your-real-openai-key-here" and your OPIK_API_KEY = "your-real-opik-key-here"
 8. Run the app locally: streamlit run poker_chatbot.py
 9. Open your browser to http://localhost:8501
-
 
 
 ⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻⸻
